@@ -17,9 +17,9 @@ def get_avatar_url(seed):
     return f"https://api.dicebear.com/9.x/adventurer/png?seed={seed}&size=96&backgroundColor=2d2d44"
 
 def get_monster_url(seed, rarity="N"):
-    # モンスター用: レアリティで背景色を変えたRPG風（N/R/SR/SSR/UR）
+    # モンスター用: ドット絵RPG風（pixel-artで名前通りに）
     bg = {"N": "94a3b8", "R": "60a5fa", "SR": "a78bfa", "SSR": "f97316", "UR": "fbbf24"}.get(rarity, "94a3b8")
-    return f"https://api.dicebear.com/9.x/bottts-neutral/png?seed={seed}&size=128&backgroundColor={bg}"
+    return f"https://api.dicebear.com/9.x/pixel-art/png?seed={seed}&size=128&backgroundColor={bg}"
 
 # --- マスターデータ ---
 TASKS = {
@@ -28,7 +28,6 @@ TASKS = {
     "💪 肉体強化 (Train)": {"reward": 40, "type": "physical", "desc": "攻撃力UP"},
     "⚡ 魔導構築 (Code)": {"reward": 50, "type": "magic", "desc": "世界改変"},
     "📖 古代魔術 (Study)": {"reward": 50, "type": "magic", "desc": "知識探求"},
-    "💤 休息 (Rest)": {"reward": 20, "type": "heal", "desc": "HP回復"}
 }
 
 JOBS = {
@@ -71,16 +70,16 @@ WEEKLY_BOSSES = [
 ]
 
 MONSTERS = {
-    "スライム": {"rarity": "N", "skill": "gold_up", "val": 1.1, "seed": "slime_creature", "skill_name": "金運アップ"},
-    "ゴブリン": {"rarity": "N", "skill": "xp_up", "val": 1.1, "seed": "goblin_creature", "skill_name": "応援"},
-    "コボルト": {"rarity": "N", "skill": "xp_up", "val": 1.05, "seed": "kobold_creature", "skill_name": "お手伝い"},
-    "ミミック": {"rarity": "R", "skill": "chest_up", "val": 1.5, "seed": "mimic_creature", "skill_name": "宝箱アップ"},
-    "ウィスプ": {"rarity": "R", "skill": "gold_up", "val": 1.2, "seed": "wisp_creature", "skill_name": "光の加護"},
-    "ケルベロス": {"rarity": "SR", "skill": "boss_killer", "val": 1.3, "seed": "cerberus_creature", "skill_name": "ボス狩り"},
-    "フェニックス": {"rarity": "SR", "skill": "xp_up", "val": 1.25, "seed": "phoenix_creature", "skill_name": "復活の炎"},
-    "ヴァルキリー": {"rarity": "SSR", "skill": "gold_up", "val": 1.6, "seed": "valkyrie_creature", "skill_name": "戦乙女の祝福"},
-    "ドラゴン": {"rarity": "UR", "skill": "boss_killer", "val": 1.5, "seed": "dragon_creature", "skill_name": "ボスキラー"},
-    "魔王の影": {"rarity": "UR", "skill": "gold_up", "val": 2.0, "seed": "demon_creature", "skill_name": "金運大アップ"},
+    "スライム": {"rarity": "N", "skill": "gold_up", "val": 1.1, "seed": "slime", "skill_name": "金運アップ", "skill_desc": "報酬ゴールド+10%"},
+    "ゴブリン": {"rarity": "N", "skill": "xp_up", "val": 1.1, "seed": "goblin", "skill_name": "応援", "skill_desc": "報酬経験値+10%"},
+    "コボルト": {"rarity": "N", "skill": "xp_up", "val": 1.05, "seed": "kobold", "skill_name": "お手伝い", "skill_desc": "報酬経験値+5%"},
+    "ミミック": {"rarity": "R", "skill": "chest_up", "val": 1.5, "seed": "mimic", "skill_name": "宝箱アップ", "skill_desc": "宝箱イベント報酬+50%"},
+    "ウィスプ": {"rarity": "R", "skill": "gold_up", "val": 1.2, "seed": "wisp", "skill_name": "光の加護", "skill_desc": "報酬ゴールド+20%"},
+    "ケルベロス": {"rarity": "SR", "skill": "boss_killer", "val": 1.3, "seed": "cerberus", "skill_name": "ボス狩り", "skill_desc": "週間ボスダメージ+30%"},
+    "フェニックス": {"rarity": "SR", "skill": "xp_up", "val": 1.25, "seed": "phoenix", "skill_name": "復活の炎", "skill_desc": "報酬経験値+25%"},
+    "ヴァルキリー": {"rarity": "SSR", "skill": "gold_up", "val": 1.6, "seed": "valkyrie", "skill_name": "戦乙女の祝福", "skill_desc": "報酬ゴールド+60%"},
+    "ドラゴン": {"rarity": "UR", "skill": "boss_killer", "val": 1.5, "seed": "dragon", "skill_name": "ボスキラー", "skill_desc": "週間ボスダメージ+50%"},
+    "魔王の影": {"rarity": "UR", "skill": "gold_up", "val": 2.0, "seed": "demon", "skill_name": "金運大アップ", "skill_desc": "報酬ゴールド+100%"},
 }
 
 # ガチャ確率（N 68% / R 25.8% / SR 5% / SSR 1% / UR 0.2%）※1000分率
@@ -173,47 +172,86 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
 
-/* 全体：ダンジョン潜行感（暗い洞窟・石壁） */
+/* 全体：ドット絵RPG風ダンジョン（石壁・レンガ・暗い洞窟） */
 .stApp {
-    background: #0a0a0f !important;
+    background: #1a1a2e !important;
     background-image:
-        linear-gradient(180deg, rgba(10,10,15,0.97) 0%, rgba(20,18,28,0.95) 30%, rgba(15,12,22,0.98) 70%, rgba(8,8,12,0.99) 100%),
-        repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(40,35,50,0.15) 2px, rgba(40,35,50,0.15) 4px),
-        repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(30,25,40,0.12) 2px, rgba(30,25,40,0.12) 4px) !important;
+        radial-gradient(circle at 20% 50%, rgba(40,30,50,0.3) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(30,20,40,0.3) 0%, transparent 50%),
+        repeating-linear-gradient(0deg, rgba(20,15,25,0.4) 0px, rgba(20,15,25,0.4) 1px, transparent 1px, transparent 8px),
+        repeating-linear-gradient(90deg, rgba(25,20,30,0.3) 0px, rgba(25,20,30,0.3) 1px, transparent 1px, transparent 8px),
+        linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 30%, #1a1a2e 70%, #0f0f1a 100%) !important;
     color: #e8e0d5 !important;
     font-family: 'DotGothic16', sans-serif;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
 }
 
 /* 本文・キャプションも読みやすく */
 p, span, .stCaption, [data-testid="stMarkdownContainer"] { color: #e8e0d5 !important; }
 label { color: #c9b896 !important; }
 
-/* タスク・行動ボタン：クエスト風・文字はっきり（クリーム色＋影） */
+/* タスク・行動ボタン：ドット絵RPG風・ソシャゲ風（枠・光） */
 .stButton > button {
-    background: linear-gradient(180deg, #2d2d44 0%, #1e1e2e 100%) !important;
+    background: linear-gradient(180deg, #3a2f4a 0%, #2a1f3a 100%) !important;
     color: #ffecd2 !important;
-    border: 2px solid #8b7355 !important;
-    border-radius: 8px !important;
+    border: 3px solid #8b7355 !important;
+    border-radius: 4px !important;
     font-weight: bold !important;
-    font-size: 1rem !important;
-    height: 56px !important;
-    text-shadow: 1px 1px 2px #000, 0 0 4px rgba(0,0,0,0.8) !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.4) !important;
+    font-size: 0.95rem !important;
+    height: 64px !important;
+    text-shadow: 2px 2px 0 #000, 0 0 6px rgba(0,0,0,0.9) !important;
+    box-shadow: 
+        inset 0 2px 0 rgba(255,255,255,0.15),
+        inset 0 -2px 0 rgba(0,0,0,0.5),
+        0 0 8px rgba(139,115,85,0.3),
+        0 2px 4px rgba(0,0,0,0.6) !important;
+    position: relative;
+    overflow: hidden;
+}
+.stButton > button::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.5s;
 }
 .stButton > button:hover {
     border-color: #c9a227 !important;
     color: #fff5e0 !important;
-    box-shadow: 0 0 12px rgba(201, 162, 39, 0.4), inset 0 1px 0 rgba(255,255,255,0.15) !important;
+    box-shadow: 
+        0 0 16px rgba(201, 162, 39, 0.6),
+        inset 0 2px 0 rgba(255,255,255,0.2),
+        inset 0 -2px 0 rgba(0,0,0,0.5),
+        0 2px 8px rgba(0,0,0,0.7) !important;
+    transform: translateY(-1px);
+}
+.stButton > button:hover::before {
+    left: 100%;
 }
 
-/* ウィンドウ枠：RPG風 */
+/* ウィンドウ枠：ドット絵RPG風（レトロゲーム風） */
 .rpg-window {
-    background: rgba(30, 28, 24, 0.95);
-    border: 3px double #8b7355;
-    border-radius: 10px;
-    padding: 15px;
+    background: rgba(25, 20, 30, 0.95);
+    border: 4px solid #8b7355;
+    border-style: double;
+    border-radius: 0px;
+    padding: 16px;
     margin-bottom: 20px;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
+    box-shadow: 
+        inset 0 0 20px rgba(0,0,0,0.5),
+        0 0 0 2px rgba(139,115,85,0.3),
+        0 4px 8px rgba(0,0,0,0.4) !important;
+    position: relative;
+}
+.rpg-window::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139,115,85,0.05) 2px, rgba(139,115,85,0.05) 4px);
+    pointer-events: none;
 }
 
 /* バイオーム (背景色) - コンテナ全体に適用 */
@@ -223,36 +261,103 @@ label { color: #c9b896 !important; }
     margin-bottom: 20px;
 }
 
-/* バイオーム */
-.biome-forest { background: linear-gradient(to bottom, #134e5e, #71b280); color: #fff; padding: 20px; border-radius: 10px; text-shadow: 1px 1px 2px #000; }
-.biome-sea    { background: linear-gradient(to bottom, #1c92d2, #004e92); color: #fff; padding: 20px; border-radius: 10px; text-shadow: 1px 1px 2px #000; }
-.biome-volcano{ background: linear-gradient(to bottom, #800000, #ff4d4d); color: #fff; padding: 20px; border-radius: 10px; text-shadow: 1px 1px 2px #000; }
-.biome-castle { background: linear-gradient(to bottom, #232526, #414345); color: #fff; padding: 20px; border-radius: 10px; text-shadow: 1px 1px 2px #000; }
+/* バイオーム：ドット絵RPG風 */
+.biome-forest { 
+    background: linear-gradient(to bottom, #134e5e, #71b280); 
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.1) 4px, rgba(0,0,0,0.1) 8px);
+    color: #fff; padding: 20px; border-radius: 0px; border: 3px solid #2d5a3d; text-shadow: 2px 2px 0 #000; 
+}
+.biome-sea    { 
+    background: linear-gradient(to bottom, #1c92d2, #004e92); 
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.1) 4px, rgba(0,0,0,0.1) 8px);
+    color: #fff; padding: 20px; border-radius: 0px; border: 3px solid #1a5a7a; text-shadow: 2px 2px 0 #000; 
+}
+.biome-volcano{ 
+    background: linear-gradient(to bottom, #800000, #ff4d4d); 
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.1) 4px, rgba(0,0,0,0.1) 8px);
+    color: #fff; padding: 20px; border-radius: 0px; border: 3px solid #5a1a1a; text-shadow: 2px 2px 0 #000; 
+}
+.biome-castle { 
+    background: linear-gradient(to bottom, #232526, #414345); 
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.15) 4px, rgba(0,0,0,0.15) 8px);
+    color: #fff; padding: 20px; border-radius: 0px; border: 3px solid #1a1a1a; text-shadow: 2px 2px 0 #000; 
+}
 
-/* ゲージ：HP/EXP */
-.bar-bg { background: #2a2a2a; height: 14px; width: 100%; border-radius: 7px; overflow: hidden; margin-top: 6px; border: 1px solid #444; }
-.bar-fill-xp { background: linear-gradient(90deg, #2ECC40, #3dff52); height: 100%; box-shadow: 0 0 8px rgba(46,204,64,0.5); }
-.bar-fill-hp { background: linear-gradient(90deg, #cc3322, #FF4136); height: 100%; box-shadow: 0 0 8px rgba(255,65,54,0.4); }
+/* ゲージ：HP/EXP（ドット絵風・ソシャゲ風） */
+.bar-bg { 
+    background: #1a1a1a; 
+    height: 16px; 
+    width: 100%; 
+    border-radius: 0px; 
+    overflow: hidden; 
+    margin-top: 6px; 
+    border: 2px solid #444; 
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+}
+.bar-fill-xp { 
+    background: linear-gradient(90deg, #2ECC40, #3dff52); 
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px);
+    height: 100%; 
+    box-shadow: 0 0 8px rgba(46,204,64,0.6), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.bar-fill-hp { 
+    background: linear-gradient(90deg, #cc3322, #FF4136); 
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 4px);
+    height: 100%; 
+    box-shadow: 0 0 8px rgba(255,65,54,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+}
 
-h1, h2, h3 { color: #ffecd2 !important; text-shadow: 2px 2px 0 #000, 0 0 10px rgba(201, 162, 39, 0.3); }
+h1, h2, h3 { 
+    color: #ffecd2 !important; 
+    text-shadow: 3px 3px 0 #000, 0 0 12px rgba(201, 162, 39, 0.4);
+    letter-spacing: 1px;
+    font-weight: bold;
+}
 
 /* info/成功メッセージ：ゲーム風 */
 [data-testid="stAlert"] { border: 1px solid #8b7355 !important; border-radius: 8px !important; }
 [data-testid="stAlert"] div { color: #e8e0d5 !important; }
 
 /* レアリティバッジ・クエストカード */
-.rarity-N { color: #94a3b8; font-weight: bold; }
-.rarity-R { color: #60a5fa; font-weight: bold; text-shadow: 0 0 8px rgba(96,165,250,0.6); }
-.rarity-SR { color: #a78bfa; font-weight: bold; text-shadow: 0 0 8px rgba(167,139,250,0.6); }
-.rarity-SSR { color: #f97316; font-weight: bold; text-shadow: 0 0 10px rgba(249,115,22,0.7); }
-.rarity-UR { color: #fbbf24; font-weight: bold; text-shadow: 0 0 12px rgba(251,191,36,0.8); }
-.pet-speech { background: rgba(30,28,24,0.95); border-left: 4px solid #8b7355; border-radius: 8px; padding: 10px 14px; margin: 8px 0; font-size: 0.95em; color: #e8e0d5; }
+.rarity-N { color: #94a3b8; font-weight: bold; text-shadow: 1px 1px 0 #000; }
+.rarity-R { color: #60a5fa; font-weight: bold; text-shadow: 1px 1px 0 #000, 0 0 8px rgba(96,165,250,0.6); }
+.rarity-SR { color: #a78bfa; font-weight: bold; text-shadow: 1px 1px 0 #000, 0 0 8px rgba(167,139,250,0.6); }
+.rarity-SSR { color: #f97316; font-weight: bold; text-shadow: 1px 1px 0 #000, 0 0 10px rgba(249,115,22,0.7); }
+.rarity-UR { color: #fbbf24; font-weight: bold; text-shadow: 2px 2px 0 #000, 0 0 12px rgba(251,191,36,0.8); }
+.pet-speech { 
+    background: rgba(30,28,24,0.95); 
+    border-left: 4px solid #8b7355; 
+    border-radius: 0px; 
+    padding: 10px 14px; 
+    margin: 8px 0; 
+    font-size: 0.95em; 
+    color: #e8e0d5; 
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.3);
+}
+/* 画像をドット絵風に */
+img { image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges; }
 .event-chest { background: linear-gradient(135deg, rgba(80,60,30,0.9), rgba(120,90,40,0.9)); border: 2px solid #c9a227; }
 .event-trap { background: linear-gradient(135deg, rgba(60,30,30,0.9), rgba(90,40,40,0.9)); border: 2px solid #cc4444; }
 .event-nothing { background: rgba(40,40,50,0.9); border: 1px solid #555; }
-.quest-card { background: rgba(40,38,32,0.95); border: 2px solid #8b7355; border-radius: 12px; padding: 16px; margin: 10px 0; }
-.quest-card-done { border-color: #2ECC40; background: rgba(30,60,40,0.9); }
-.reward-big { font-size: 1.4rem; color: #fbbf24; font-weight: bold; }
+.quest-card { 
+    background: rgba(40,38,32,0.95); 
+    border: 3px solid #8b7355; 
+    border-radius: 0px; 
+    padding: 16px; 
+    margin: 10px 0; 
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
+}
+.quest-card-done { 
+    border-color: #2ECC40; 
+    background: rgba(30,60,40,0.9); 
+    box-shadow: 0 0 12px rgba(46,204,64,0.4), inset 0 0 10px rgba(0,0,0,0.3);
+}
+.reward-big { 
+    font-size: 1.4rem; 
+    color: #fbbf24; 
+    font-weight: bold; 
+    text-shadow: 2px 2px 0 #000, 0 0 8px rgba(251,191,36,0.6);
+}
 
 /* ===== モバイル・レスポンシブ ===== */
 @media (max-width: 768px) {
@@ -462,7 +567,8 @@ def main():
             c_b1.image(get_monster_url(b_data['seed'], b_data['rarity']), width=70)
             pet_says = get_pet_message(buddy, d_cnt, yesterday_cnt)
             st.markdown(f"<div class='pet-speech'><strong>{buddy}</strong>「{pet_says}」</div>", unsafe_allow_html=True)
-            st.caption(f"効果: {b_data.get('skill_name', b_data['skill'])}")
+            skill_desc = b_data.get('skill_desc', b_data.get('skill_name', b_data['skill']))
+            st.caption(f"効果: {skill_desc}")
         else:
             st.info("Buddy: なし (ショップで召喚しよう。相棒がいると励ましてくれるよ)")
 
@@ -481,7 +587,10 @@ def main():
     cols = [c1, c2, c3]
     
     for i, (t_name, t_data) in enumerate(TASKS.items()):
-        if cols[i%3].button(t_name, use_container_width=True, help=t_data['desc']):
+        # 基本報酬を計算（ボーナス前）
+        base_reward = t_data['reward']
+        btn_label = f"{t_name}\n💰 {base_reward}G"
+        if cols[i%3].button(btn_label, use_container_width=True, help=f"{t_data['desc']} - 基本報酬: {base_reward}G"):
             # 計算ロジック
             base = t_data['reward']
             bonus = 1.0
@@ -764,9 +873,10 @@ def main():
             if st.session_state.get('last_gacha_result'):
                 mk, r = st.session_state.last_gacha_result
                 md = MONSTERS[mk]
+                skill_desc = md.get('skill_desc', md.get('skill_name', md['skill']))
                 st.markdown(f'<span class="rarity-{r}">★ {r} ★</span> {mk}', unsafe_allow_html=True)
                 st.image(get_monster_url(md['seed'], r), width=80)
-                st.caption(f"効果: {md.get('skill_name', md['skill'])}")
+                st.caption(f"効果: {skill_desc}")
 
         with col_g2:
             st.markdown("**✨ 10連召喚（お得）**")
@@ -814,46 +924,14 @@ def main():
             for m in valid:
                 md = MONSTERS[m]
                 r = md["rarity"]
-                st.markdown(f"- **{m}** <span class='rarity-{r}'>{r}</span> … {md.get('skill_name', md['skill'])}", unsafe_allow_html=True)
+                skill_desc = md.get('skill_desc', md.get('skill_name', md['skill']))
+                st.markdown(f"- **{m}** <span class='rarity-{r}'>{r}</span><br>効果: {skill_desc}", unsafe_allow_html=True)
         else:
             st.info("召喚で仲間を増やそう！")
 
         st.divider()
         st.markdown("#### 🛒 便利アイテム")
-        it1, it2, it3, it4 = st.columns(4)
-        with it1:
-            st.markdown("**💰 金貨袋（小）**")
-            st.caption("50G → 80G")
-            if st.button("購入", key="item_gold"):
-                if _int(user.get('gold')) >= 50:
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 50 + 80)
-                    st.success("80G 獲得！"); time.sleep(0.5); st.rerun()
-                else: st.error("金貨不足")
-        with it2:
-            st.markdown("**💰 金貨袋（大）**")
-            st.caption("120G → 200G")
-            if st.button("購入", key="item_gold_large"):
-                if _int(user.get('gold')) >= 120:
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 120 + 200)
-                    st.success("200G 獲得！"); time.sleep(0.5); st.rerun()
-                else: st.error("金貨不足")
-        with it3:
-            st.markdown("**💰 金貨袋（特大）**")
-            st.caption("300G → 500G")
-            if st.button("購入", key="item_gold_xl"):
-                if _int(user.get('gold')) >= 300:
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 300 + 500)
-                    st.success("500G 獲得！"); time.sleep(0.5); st.rerun()
-                else: st.error("金貨不足")
-        with it4:
-            st.markdown("**💎 宝玉の箱**")
-            st.caption("500G → 900G")
-            if st.button("購入", key="item_gold_xxl"):
-                if _int(user.get('gold')) >= 500:
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 500 + 900)
-                    st.success("900G 獲得！"); time.sleep(0.5); st.rerun()
-                else: st.error("金貨不足")
-        st.markdown("**📜 経験値**")
+        st.markdown("**📜 経験値アイテム**")
         xp1, xp2, xp3 = st.columns(3)
         with xp1:
             st.caption("経験値の書 100G → 150 XP")
