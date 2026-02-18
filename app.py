@@ -13,13 +13,44 @@ st.set_page_config(page_title="Life Quest: Recovery", page_icon="⚔️", layout
 
 # --- 画像生成 API (RPG風) ---
 def get_avatar_url(seed):
-    # 主人公用: RPG風アドベンチャー風
+    # 主人公用: adventurerスタイルでRPG風に
     return f"https://api.dicebear.com/9.x/adventurer/png?seed={seed}&size=96&backgroundColor=2d2d44"
 
-def get_monster_url(seed, rarity="N"):
-    # モンスター用: ドット絵RPG風（pixel-artで名前通りに）
-    bg = {"N": "94a3b8", "R": "60a5fa", "SR": "a78bfa", "SSR": "f97316", "UR": "fbbf24"}.get(rarity, "94a3b8")
-    return f"https://api.dicebear.com/9.x/pixel-art/png?seed={seed}&size=128&backgroundColor={bg}"
+# モンスターの絵文字マッピング（イラストの代替案）
+MONSTER_EMOJIS = {
+    "スライム": "🟢",
+    "ゴブリン": "👹",
+    "コボルト": "🐺",
+    "ミミック": "📦",
+    "ウィスプ": "✨",
+    "ケルベロス": "🐕",
+    "フェニックス": "🔥",
+    "ヴァルキリー": "⚔️",
+    "ドラゴン": "🐉",
+    "魔王の影": "👤",
+    "ギガントゴーレム": "🗿",
+    "深淵のスライム": "💧",
+    "紅蓮の魔獣": "🔥",
+}
+
+def get_monster_display(monster_name, rarity="N"):
+    """モンスターの表示（絵文字 + レアリティカラー）"""
+    emoji = MONSTER_EMOJIS.get(monster_name, "👾")
+    rarity_colors = {
+        "N": "#94a3b8", "R": "#60a5fa", "SR": "#a78bfa", 
+        "SSR": "#f97316", "UR": "#fbbf24"
+    }
+    color = rarity_colors.get(rarity, "#94a3b8")
+    return emoji, color
+
+def get_monster_url(seed, rarity="N", monster_name=""):
+    """モンスターの表示用（後方互換のため残すが、実際にはget_monster_displayを使用）"""
+    # この関数は後方互換のため残すが、実際にはget_monster_displayを使用
+    emoji, color = get_monster_display(monster_name, rarity)
+    import base64
+    svg_content = f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><text x="64" y="80" font-size="96" text-anchor="middle" dominant-baseline="central">{emoji}</text></svg>'
+    encoded = base64.b64encode(svg_content.encode('utf-8')).decode('utf-8')
+    return f"data:image/svg+xml;base64,{encoded}"
 
 # --- マスターデータ ---
 TASKS = {
@@ -64,9 +95,9 @@ JOBS = {
 }
 
 WEEKLY_BOSSES = [
-    {"name": "ギガントゴーレム", "weak": "magic", "hp": 2000, "seed": "boss_golem", "desc": "魔法が弱点"},
-    {"name": "深淵のスライム", "weak": "holy", "hp": 1500, "seed": "boss_slime", "desc": "浄化が弱点"},
-    {"name": "紅蓮の魔獣", "weak": "physical", "hp": 1800, "seed": "boss_beast", "desc": "物理が弱点"},
+    {"name": "ギガントゴーレム", "weak": "magic", "hp": 2000, "seed": "boss_golem", "desc": "魔法が弱点", "reward": 1000, "reward_xp": 500},
+    {"name": "深淵のスライム", "weak": "holy", "hp": 1500, "seed": "boss_slime", "desc": "浄化が弱点", "reward": 800, "reward_xp": 400},
+    {"name": "紅蓮の魔獣", "weak": "physical", "hp": 1800, "seed": "boss_beast", "desc": "物理が弱点", "reward": 900, "reward_xp": 450},
 ]
 
 MONSTERS = {
@@ -130,21 +161,77 @@ def get_rebirth_title(rebirth_count):
     if rebirth_count < len(TITLES_BY_REBIRTH): return TITLES_BY_REBIRTH[rebirth_count]
     return f"輪廻の{rebirth_count}転生者"
 
+# --- 実績システム ---
+ACHIEVEMENTS = {
+    "first_task": {"name": "初めての一歩", "desc": "初めてタスクを完了", "reward": 50, "icon": "🎯"},
+    "task_10": {"name": "継続の力", "desc": "タスクを10回完了", "reward": 200, "icon": "🔥"},
+    "task_50": {"name": "努力家", "desc": "タスクを50回完了", "reward": 500, "icon": "⭐"},
+    "task_100": {"name": "百戦錬磨", "desc": "タスクを100回完了", "reward": 1000, "icon": "💎"},
+    "floor_10": {"name": "10階到達", "desc": "10階層に到達", "reward": 300, "icon": "🏔️"},
+    "floor_50": {"name": "中盤突破", "desc": "50階層に到達", "reward": 800, "icon": "⛰️"},
+    "floor_100": {"name": "最下層到達", "desc": "100階層に到達", "reward": 2000, "icon": "👑"},
+    "rebirth_1": {"name": "転生者", "desc": "1回転生", "reward": 1500, "icon": "🔄"},
+    "rebirth_5": {"name": "輪廻の達人", "desc": "5回転生", "reward": 5000, "icon": "🌟"},
+    "level_10": {"name": "レベル10", "desc": "レベル10に到達", "reward": 400, "icon": "📈"},
+    "level_20": {"name": "レベル20", "desc": "レベル20に到達", "reward": 1000, "icon": "📊"},
+    "gacha_ur": {"name": "UR獲得", "desc": "URモンスターを獲得", "reward": 2000, "icon": "✨"},
+    "streak_7": {"name": "1週間継続", "desc": "7日連続でタスク完了", "reward": 500, "icon": "🔥"},
+    "streak_30": {"name": "1ヶ月継続", "desc": "30日連続でタスク完了", "reward": 3000, "icon": "💪"},
+}
+
+# --- ログインボーナス（連続ログイン報酬） ---
+LOGIN_BONUS = {
+    1: 50, 2: 100, 3: 150, 4: 200, 5: 250, 6: 300, 7: 500,
+    14: 1000, 21: 1500, 30: 2000
+}
+
+# --- ミッション（短期目標） ---
+MISSIONS = {
+    "daily_1": {"name": "今日1つ", "desc": "今日中にタスク1回", "reward": 30, "type": "daily", "target": 1},
+    "daily_2": {"name": "今日2つ", "desc": "今日中にタスク2回", "reward": 60, "type": "daily", "target": 2},
+    "daily_3": {"name": "今日3つ", "desc": "今日中にタスク3回", "reward": 100, "type": "daily", "target": 3},
+    "weekly_5": {"name": "週5回", "desc": "今週中にタスク5回", "reward": 200, "type": "weekly", "target": 5},
+    "weekly_10": {"name": "週10回", "desc": "今週中にタスク10回", "reward": 400, "type": "weekly", "target": 10},
+}
+
+# --- ランダム報酬ボックス（サプライズ要素） ---
+RANDOM_BOX_REWARDS = [
+    ("gold", 50, "💰 ゴールド50G"),
+    ("gold", 100, "💰 ゴールド100G"),
+    ("gold", 200, "💰 ゴールド200G"),
+    ("xp", 50, "✨ 経験値50XP"),
+    ("xp", 100, "✨ 経験値100XP"),
+    ("gacha", 1, "🎫 ガチャチケット1枚"),
+]
+
 # --- ADHD向け・定期的に開きたくなる仕組み ---
-def calc_task_streak(df_t):
+def calc_task_streak(df_t, user=None):
     """連続でタスクを1回以上やった日数（今日から遡る）"""
     if df_t.empty or 'dt' not in df_t.columns:
         return 0
     today = date.today()
     streak = 0
     d = today
+    
+    # ストリーク保護チェック
+    streak_protected = False
+    if user:
+        streak_protect_date = user.get('streak_protect_date') or ''
+        if str(streak_protect_date) == str(today):
+            streak_protected = True
+    
     while True:
         cnt = len(df_t[df_t['dt'].dt.date == d])
         if cnt >= 1:
             streak += 1
             d -= timedelta(days=1)
         else:
-            break
+            # 今日でタスクが0でも、ストリーク保護が有効ならカウント
+            if d == today and streak_protected:
+                streak += 1
+                d -= timedelta(days=1)
+            else:
+                break
     return streak
 
 # --- ペットのセリフ（励まし・昨日比） ---
@@ -172,15 +259,8 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
 
-/* 全体：ドット絵RPG風ダンジョン（石壁・レンガ・暗い洞窟） */
+/* 全体：ドット絵RPG風ダンジョン（背景は動的に設定される） */
 .stApp {
-    background: #1a1a2e !important;
-    background-image:
-        radial-gradient(circle at 20% 50%, rgba(40,30,50,0.3) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(30,20,40,0.3) 0%, transparent 50%),
-        repeating-linear-gradient(0deg, rgba(20,15,25,0.4) 0px, rgba(20,15,25,0.4) 1px, transparent 1px, transparent 8px),
-        repeating-linear-gradient(90deg, rgba(25,20,30,0.3) 0px, rgba(25,20,30,0.3) 1px, transparent 1px, transparent 8px),
-        linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 30%, #1a1a2e 70%, #0f0f1a 100%) !important;
     color: #e8e0d5 !important;
     font-family: 'DotGothic16', sans-serif;
     image-rendering: pixelated;
@@ -482,12 +562,91 @@ def get_weekly_boss():
     return WEEKLY_BOSSES[week_num % len(WEEKLY_BOSSES)]
 
 def get_biome_html(floor):
-    # 100階層: 1-25 森, 26-50 海, 51-75 火山, 76-100 魔王城
+    # 100階層: 10階層ごとに背景が変わる
     f = min(max(1, int(floor)), MAX_FLOOR)
-    if f <= 25: return "biome-forest", "🌲 始まりの森"
-    if f <= 50: return "biome-sea", "🌊 紺碧の海岸"
-    if f <= 75: return "biome-volcano", "🌋 灼熱の火山"
-    return "biome-castle", "🏰 魔王城"
+    biome_num = ((f - 1) // 10) + 1  # 1-10階=1, 11-20階=2, ...
+    
+    biomes = {
+        1: ("biome-entrance", "🚪 入口の洞窟", "#1a1a2e", "#2d2d44"),
+        2: ("biome-dark", "🌑 暗闇の回廊", "#0f0f1a", "#1a1a2e"),
+        3: ("biome-stone", "🪨 石の迷宮", "#2a2a3a", "#3a3a4a"),
+        4: ("biome-crystal", "💎 水晶の洞", "#1a1a3e", "#2a2a4e"),
+        5: ("biome-lava", "🌋 溶岩の道", "#3a1a1a", "#4a2a2a"),
+        6: ("biome-ice", "❄️ 氷の回廊", "#1a2a3a", "#2a3a4a"),
+        7: ("biome-shadow", "👻 影の領域", "#0a0a1a", "#1a1a2a"),
+        8: ("biome-magic", "✨ 魔法の間", "#2a1a3a", "#3a2a4a"),
+        9: ("biome-abyss", "🌊 深淵の底", "#0a1a2a", "#1a2a3a"),
+        10: ("biome-throne", "👑 王座の間", "#3a2a1a", "#4a3a2a"),
+    }
+    
+    biome_data = biomes.get(biome_num, biomes[10])
+    return biome_data[0], biome_data[1], biome_data[2], biome_data[3]
+
+def check_achievements(user, df_t, df_i, ws_u, u_idx):
+    """実績をチェックして未達成のものを返す（既に受取済みのものは除外）"""
+    total_tasks = len(df_t[df_t['user_id']=='u001']) if not df_t.empty else 0
+    floor = _int(user.get('dungeon_floor'))
+    rebirth = _int(user.get('rebirth_count'))
+    level = _int(user.get('level'), 1)
+    streak = calc_task_streak(df_t, user)
+    has_ur = False
+    if not df_i.empty:
+        user_items = df_i[df_i['user_id']=='u001']
+        if not user_items.empty:
+            has_ur = len(user_items[user_items['rarity']=='UR']) > 0
+    
+    # 既に受取済みの実績を取得
+    achieved_str = user.get('achievements', '') or ''
+    achieved_set = set([a.strip() for a in achieved_str.split(',') if a.strip()])
+    new_achievements = []
+    rewards = 0
+    
+    checks = [
+        ("first_task", total_tasks >= 1),
+        ("task_10", total_tasks >= 10),
+        ("task_50", total_tasks >= 50),
+        ("task_100", total_tasks >= 100),
+        ("floor_10", floor >= 10),
+        ("floor_50", floor >= 50),
+        ("floor_100", floor >= 100),
+        ("rebirth_1", rebirth >= 1),
+        ("rebirth_5", rebirth >= 5),
+        ("level_10", level >= 10),
+        ("level_20", level >= 20),
+        ("gacha_ur", has_ur),
+        ("streak_7", streak >= 7),
+        ("streak_30", streak >= 30),
+    ]
+    
+    for ach_id, condition in checks:
+        # 条件を満たしていて、かつまだ受取っていない場合のみ追加
+        if condition and ach_id not in achieved_set:
+            new_achievements.append(ach_id)
+            if ach_id in ACHIEVEMENTS:
+                rewards += ACHIEVEMENTS[ach_id]['reward']
+    
+    return new_achievements, rewards
+
+def get_next_rewards(user, df_t, today_date):
+    """次に獲得できる報酬を予告"""
+    total_tasks = len(df_t[df_t['user_id']=='u001']) if not df_t.empty else 0
+    floor = _int(user.get('dungeon_floor'))
+    cur_xp = _int(user.get('current_xp'))
+    nxt_xp = _int(user.get('next_level_xp'), 100)
+    level = _int(user.get('level'), 1)
+    d_cnt = len(df_t[df_t['dt'].dt.date == today_date]) if not df_t.empty else 0
+    
+    hints = []
+    if cur_xp > 0 and nxt_xp > cur_xp:
+        needed = nxt_xp - cur_xp
+        hints.append(f"あと{needed} XPでレベルアップ！")
+    if d_cnt < 3:
+        hints.append(f"あと{3-d_cnt}タスクでデイリー達成（200G）")
+    if floor < MAX_FLOOR:
+        hints.append(f"あと{MAX_FLOOR-floor}階で転生可能")
+    if total_tasks < 10:
+        hints.append(f"あと{10-total_tasks}タスクで実績「継続の力」")
+    return hints
 
 # --- メインロジック ---
 def main():
@@ -510,6 +669,7 @@ def main():
     today = date.today()
     yesterday = today - timedelta(days=1)
     df_t = pd.DataFrame(ws_t.get_all_records())
+    df_i = pd.DataFrame(ws_i.get_all_records())
     d_cnt, w_cnt, yesterday_cnt = 0, 0, 0
     if not df_t.empty:
         df_t['dt'] = pd.to_datetime(df_t['created_at'])
@@ -520,6 +680,60 @@ def main():
     d_claim = (str(user.get('daily_claimed')) == str(today))
     wk_id = f"{today.year}-W{today.isocalendar()[1]}"
     w_claim = (str(user.get('weekly_claimed')) == wk_id)
+    task_streak = calc_task_streak(df_t, user)
+    
+    # ログインボーナスチェック
+    login_streak = _int(user.get('login_streak'))
+    last_login = user.get('last_login') or user.get('_login') or ''
+    is_new_login = (str(last_login) != str(today))
+    login_bonus_gold = LOGIN_BONUS.get(login_streak + 1, 0) if is_new_login else 0
+    
+    # 実績チェック
+    new_achievements, achievement_rewards = check_achievements(user, df_t, df_i, ws_u, u_idx)
+    
+    # 報酬予告
+    reward_hints = get_next_rewards(user, df_t, today)
+    
+    # 期間限定イベント（例：週末ボーナス）
+    is_weekend = today.weekday() >= 5  # 土日
+    event_active = False
+    event_name = ""
+    event_desc = ""
+    if is_weekend:
+        event_active = True
+        event_name = "週末ボーナスイベント"
+        event_desc = "週末はタスク報酬が+20%アップ！"
+    
+    # 今日のタスク履歴（ハイライト用）
+    today_tasks = []
+    if not df_t.empty:
+        today_tasks = df_t[df_t['dt'].dt.date == today]['task_name'].tolist()
+    
+    # 保留中のガチャチケット（ランダムボックスで獲得）
+    pending_ticket = st.session_state.get('pending_gacha_ticket', False)
+    if pending_ticket:
+        st.markdown("""
+        <div class="rpg-window" style="border-color: #fbbf24; background: rgba(50,40,20,0.95);">
+            <h4 style="color: #ffecd2; margin: 0 0 8px 0;">🎫 ガチャチケット獲得！</h4>
+            <p style="margin: 0; color: #c9b896;">ランダムボックスからガチャチケットを獲得しました！ ショップで使用できます。</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("🎫 今すぐ使用する", key="use_pending_ticket"):
+            m_key = gacha_draw()
+            m_data = MONSTERS[m_key]
+            df_i_check = pd.DataFrame(ws_i.get_all_records())
+            already_has = not df_i_check.empty and len(df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]) > 0
+            if already_has:
+                piece_gold = {"N": 10, "R": 30, "SR": 100, "SSR": 300, "UR": 1000}.get(m_data['rarity'], 10)
+                new_gold = _int(user.get('gold')) + piece_gold
+                ws_u.update_cell(u_idx, 6, new_gold)
+                st.session_state.last_gacha_result = (m_key, m_data['rarity'], True, piece_gold)
+                st.warning(f"重複！{m_key} → ピース変換で {piece_gold}G 獲得"); time.sleep(0.8); st.rerun()
+            else:
+                ws_i.append_row(['u001', m_key, m_data['rarity'], 1, str(datetime.now())])
+                st.session_state.last_gacha_result = (m_key, m_data['rarity'], False, 0)
+                st.session_state.pending_gacha_ticket = False
+                st.success(f"{m_key} GET!"); time.sleep(0.8); st.rerun()
 
     # --- 1. ヘッダー (アバター & ステータス) ---
     st.markdown("""
@@ -553,7 +767,6 @@ def main():
         st.markdown(f"""<div class="bar-bg"><div class="bar-fill-xp" style="width:{xp_pct}%;"></div></div>""", unsafe_allow_html=True)
         st.caption(f"Exp: {cur_xp}/{nxt_xp}")
         st.write(f"💰 {_int(user.get('gold'))} G")
-        task_streak = calc_task_streak(df_t)
         login_streak = _int(user.get('login_streak'))
         st.caption(f"🌞 デイリー {d_cnt}/3 ｜ 📅 ウィークリー {w_cnt}/15")
         st.caption(f"🔥 タスク連続 {task_streak}日 ｜ 📆 ログイン {login_streak}日")
@@ -563,26 +776,162 @@ def main():
         buddy = user.get('equipped_pet', '') or ''
         if buddy in MONSTERS:
             b_data = MONSTERS[buddy]
+            # モンスターのレベルを取得
+            buddy_level = 1
+            if not df_i.empty:
+                buddy_items = df_i[(df_i['user_id']=='u001') & (df_i['item_name']==buddy)]
+                if not buddy_items.empty:
+                    buddy_level = _int(buddy_items.iloc[0].get('quantity', 1))
+            
             c_b1, c_b2 = st.columns([1, 4])
-            c_b1.image(get_monster_url(b_data['seed'], b_data['rarity']), width=70)
+            emoji, color = get_monster_display(buddy, b_data['rarity'])
+            c_b1.markdown(f'<div style="font-size: 64px; text-align: center; background: {color}20; border-radius: 8px; padding: 8px;">{emoji}</div>', unsafe_allow_html=True)
             pet_says = get_pet_message(buddy, d_cnt, yesterday_cnt)
-            st.markdown(f"<div class='pet-speech'><strong>{buddy}</strong>「{pet_says}」</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='pet-speech'><strong>{buddy}</strong> (Lv.{buddy_level})「{pet_says}」</div>", unsafe_allow_html=True)
             skill_desc = b_data.get('skill_desc', b_data.get('skill_name', b_data['skill']))
-            st.caption(f"効果: {skill_desc}")
+            level_bonus = f" (レベル{buddy_level}で効果+{(buddy_level-1)*5}%)" if buddy_level > 1 else ""
+            st.caption(f"効果: {skill_desc}{level_bonus}")
         else:
             st.info("Buddy: なし (ショップで召喚しよう。相棒がいると励ましてくれるよ)")
 
+    # ストリーク保護警告（連続タスクが途切れそうな時）
+    if task_streak > 0 and d_cnt == 0:
+        st.markdown("""
+        <div class="rpg-window" style="border-color: #f59e0b; background: rgba(50,40,20,0.95);">
+            <h4 style="color: #ffecd2; margin: 0 0 8px 0;">⚠️ ストリーク保護</h4>
+            <p style="margin: 0; color: #c9b896;">現在{task_streak}日連続中！ 今日1つでもタスクを完了すれば継続できます。</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # ログインボーナス表示・受取
+    if is_new_login and login_bonus_gold > 0:
+        st.markdown(f"""
+        <div class="rpg-window" style="border-color: #c9a227; background: rgba(40,32,24,0.95);">
+            <h3 style="color: #ffecd2; margin: 0 0 8px 0;">🎁 ログインボーナス Day {login_streak + 1}</h3>
+            <p style="margin: 0; color: #c9b896;">連続ログイン {login_streak + 1}日目！ {login_bonus_gold}G 獲得！</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button(f"🎁 {login_bonus_gold}G を受け取る", key="login_bonus"):
+            try:
+                # 先にlast_loginを更新してから報酬を追加（重複防止）
+                ws_u.update_cell(u_idx, 9, login_streak + 1)  # login_streak
+                ws_u.update_cell(u_idx, 10, str(today))  # last_loginを先に更新
+                new_gold = _int(user.get('gold')) + login_bonus_gold
+                ws_u.update_cell(u_idx, 6, new_gold)
+                st.success(f"{login_bonus_gold}G 獲得！"); time.sleep(0.2); st.rerun()
+            except Exception as e:
+                st.error(f"ログインボーナスの保存に失敗しました。スプレッドシートの列I(9)に「login_streak」、列J(10)に「last_login」列があるか確認してください。エラー: {str(e)}")
+                st.stop()
+    
+    # 実績達成通知（コンパクトに）
+    # スプレッドシートから既に受取済みの実績を取得
+    achieved_str = user.get('achievements', '') or ''
+    achieved_set = set([a.strip() for a in achieved_str.split(',') if a.strip()])
+    # new_achievementsから既に受取済みのものを除外
+    unclaimed_achievements = [a for a in new_achievements if a not in achieved_set]
+    
+    if unclaimed_achievements:
+        unclaimed_rewards = sum(ACHIEVEMENTS.get(a, {}).get('reward', 0) for a in unclaimed_achievements if a in ACHIEVEMENTS)
+        if unclaimed_rewards > 0:
+            st.markdown(f"""
+            <div class="rpg-window" style="border-color: #fbbf24; background: rgba(50,40,20,0.95); margin-bottom: 8px;">
+                <h4 style="color: #ffecd2; margin: 0 0 4px 0;">🏆 実績達成！</h4>
+                <p style="margin: 0; color: #c9b896; font-size: 0.9em;">{', '.join([ACHIEVEMENTS.get(a, {}).get('name', a) for a in unclaimed_achievements[:3]])}{'...' if len(unclaimed_achievements) > 3 else ''}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"🎁 実績報酬 {unclaimed_rewards}G を受け取る", key="achievement_reward"):
+                # まずスプレッドシートを更新してから報酬を追加（重複防止）
+                new_achieved_str = ','.join(list(achieved_set) + unclaimed_achievements).strip(',')
+                try:
+                    ws_u.update_cell(u_idx, 25, new_achieved_str)  # achievements列を先に更新
+                    # 更新が成功したことを確認
+                    new_gold = _int(user.get('gold')) + unclaimed_rewards
+                    ws_u.update_cell(u_idx, 6, new_gold)
+                    st.success(f"{unclaimed_rewards}G 獲得！"); time.sleep(0.2); st.rerun()
+                except Exception as e:
+                    st.error(f"実績報酬の保存に失敗しました。スプレッドシートの列Y(25)に「achievements」列があるか確認してください。エラー: {str(e)}")
+                    st.stop()
+    
+    # 報酬予告
+    if reward_hints:
+        st.markdown("""
+        <div class="rpg-window" style="margin-bottom: 12px; border-color: #60a5fa;">
+            <h4 style="margin: 0 0 8px 0; color: #ffecd2;">💡 次に獲得できる報酬</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        for hint in reward_hints[:3]:  # 最大3つ表示
+            st.caption(f"✨ {hint}")
+    
+    # 期間限定イベント表示
+    if event_active:
+        st.markdown(f"""
+        <div class="rpg-window" style="border-color: #fbbf24; background: rgba(50,40,20,0.95); margin-bottom: 12px;">
+            <h4 style="color: #ffecd2; margin: 0 0 8px 0;">🎉 {event_name}</h4>
+            <p style="margin: 0; color: #c9b896;">{event_desc}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # 今日のハイライト（小さな成功の可視化 - ADHD向け）
+    if today_tasks:
+        st.markdown("""
+        <div class="rpg-window" style="margin-bottom: 12px; border-color: #2ECC40;">
+            <h4 style="margin: 0 0 8px 0; color: #2ECC40;">✨ 今日やったこと（小さな成功の記録）</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        for task in today_tasks:
+            st.markdown(f"""
+            <div style="background: rgba(46, 204, 64, 0.1); border-left: 4px solid #2ECC40; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #fff;">✅ {task}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        if d_cnt > 0:
+            st.markdown(f"""
+            <div style="background: rgba(255, 215, 0, 0.2); border: 2px solid #ffd700; border-radius: 8px; padding: 12px; margin: 8px 0; text-align: center;">
+                <p style="margin: 0; color: #ffd700; font-size: 1.2rem; font-weight: bold;">🎉 今日は{d_cnt}つもクリアした！ すごい！</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
     st.markdown("---")
 
     # --- 2. アクション (タスク) ---
     rec_task = random.choice(list(TASKS.keys())) if TASKS else ""
+    
+    # ADHD向け：タスク開始のハードルを下げるメッセージ
+    motivation_messages = [
+        "💪 1つだけでも大丈夫！ 小さく始めよう",
+        "🌟 完璧を目指さなくてOK。1つできたらそれでOK！",
+        "✨ 5分だけでもいい。始めることが大切",
+        "🎯 今日は1つだけ。それだけで十分だよ",
+        "💫 小さな一歩が大きな変化につながる",
+    ]
+    motivation = random.choice(motivation_messages)
+    
     st.markdown(f"""
-    <div class="rpg-window" style="margin-bottom: 12px;">
+    <div class="rpg-window" style="margin-bottom: 12px; border-color: #60a5fa;">
         <h3 style="margin: 0 0 8px 0;">⚔️ クエストボード ― 行動を選べ</h3>
         <p style="margin: 0; color: #c9b896; font-size: 0.9em;">タスクを完了してゴールドと経験値を得よう</p>
-        <p style="margin: 8px 0 0 0; color: #8b7355; font-size: 0.85em;">💡 今日は1つだけでもOK！ 脳のご褒美、ひとつずつ貰おう。今日のおすすめ: {rec_task}</p>
+        <div style="background: rgba(96, 165, 250, 0.2); border-left: 4px solid #60a5fa; padding: 12px; margin: 12px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #ffecd2; font-size: 1rem; font-weight: bold;">{motivation}</p>
+            <p style="margin: 4px 0 0 0; color: #c9b896; font-size: 0.9em;">今日のおすすめ: {rec_task}</p>
+        </div>
+        <p style="margin: 8px 0 0 0; color: #8b7355; font-size: 0.85em;">💡 タスクを1つ完了すると、すぐに報酬がもらえるよ！</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # デイリー進捗の視覚化（ADHD向け）
+    if d_cnt < 3:
+        remaining = 3 - d_cnt
+        st.markdown(f"""
+        <div style="background: rgba(201, 162, 39, 0.2); border: 2px solid #c9a227; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+            <p style="margin: 0; color: #ffecd2; font-size: 1.1rem; font-weight: bold;">
+                🎯 デイリー達成まで あと{remaining}タスク！
+            </p>
+            <div class="bar-bg" style="height: 16px; margin-top: 8px;">
+                <div class="bar-fill-xp" style="width: {min(100, d_cnt/3*100)}%; height: 100%; background: linear-gradient(90deg, #c9a227, #fbbf24);"></div>
+            </div>
+            <p style="margin: 4px 0 0 0; color: #c9b896; font-size: 0.9em;">進捗: {d_cnt}/3 ({int(d_cnt/3*100)}%)</p>
+        </div>
+        """, unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     cols = [c1, c2, c3]
     
@@ -603,11 +952,23 @@ def main():
             elif job_info['bonus'] == t_data['type']:
                 bonus = 1.5; logs.append("⚔️ 職適正!")
             
-            # ペット
+            # ペット（レベルアップ効果を適用）
             if buddy in MONSTERS:
                 pskill = MONSTERS[buddy]['skill']
-                if pskill == 'gold_up': bonus *= 1.1; logs.append("💰 金運")
-                if pskill == 'xp_up': bonus *= 1.1; logs.append("✨ 応援")
+                # モンスターのレベルを取得
+                buddy_level = 1
+                if not df_i.empty:
+                    buddy_items = df_i[(df_i['user_id']=='u001') & (df_i['item_name']==buddy)]
+                    if not buddy_items.empty:
+                        buddy_level = _int(buddy_items.iloc[0].get('quantity', 1))
+                # レベルに応じた効果（レベル1で1.1倍、最大レベル10で1.5倍）
+                level_multiplier = 1.0 + (buddy_level - 1) * 0.05
+                if pskill == 'gold_up': 
+                    bonus *= (1.1 * level_multiplier)
+                    logs.append(f"💰 金運 Lv.{buddy_level}")
+                if pskill == 'xp_up': 
+                    bonus *= (1.1 * level_multiplier)
+                    logs.append(f"✨ 応援 Lv.{buddy_level}")
             
             val = int(base * bonus)
             if val < 1: val = 1
@@ -624,6 +985,11 @@ def main():
                 rebirth_bonus = 1 + 0.1 * rebirth_count
                 val = max(1, int(val * rebirth_bonus))
                 logs.append("✨転生")
+            
+            # 週末イベントボーナス
+            if event_active:
+                val = max(1, int(val * 1.2))
+                logs.append("🎉 週末ボーナス!")
             
             # ボス
             w_boss = get_weekly_boss()
@@ -656,6 +1022,19 @@ def main():
             if event_gold != 0:
                 logs.append(event_msg.split("!")[0] if "!" in event_msg else event_msg)
 
+            # ランダム報酬ボックス（5%の確率）
+            random_box_reward = None
+            if random.random() < 0.05:
+                box_type, box_amount, box_msg = random.choice(RANDOM_BOX_REWARDS)
+                random_box_reward = (box_type, box_amount, box_msg)
+                if box_type == "gold":
+                    final_gold += box_amount
+                elif box_type == "xp":
+                    new_xp += box_amount
+                elif box_type == "gacha":
+                    # ガチャチケットは後で処理（セッション状態に保存）
+                    st.session_state.pending_gacha_ticket = True
+            
             ws_u.update_cell(u_idx, 6, final_gold)
             ws_u.update_cell(u_idx, 4, new_xp)
             ws_u.update_cell(u_idx, 8, new_floor)
@@ -664,20 +1043,175 @@ def main():
             
             ts = datetime.now().strftime('%H:%M')
             st.session_state.battle_log.insert(0, f"[{ts}] {t_name}: {val}G " + " ".join(logs))
-            st.toast(f"やったね！ +{val} G")
+            
+            # ADHD向け：大きなフィードバックと達成感
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 32px; text-align: center; margin: 20px 0; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);">
+                <h1 style="font-size: 3rem; margin: 0; color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">🎉 タスク完了！</h1>
+                <p style="font-size: 2rem; margin: 16px 0; color: #ffd700; font-weight: bold;">+{val} G 獲得！</p>
+                <p style="font-size: 1.2rem; margin: 8px 0; color: #fff;">{" ".join(logs)}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            st.balloons()
+            st.toast(f"✨ +{val} G 獲得！", icon="💰")
             if is_first_today:
-                st.toast("🌟 今日の最初の1つ、クリア！ その調子！")
+                st.markdown("""
+                <div style="background: rgba(255, 215, 0, 0.2); border: 2px solid #ffd700; border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center;">
+                    <h3 style="color: #ffd700; margin: 0;">🌟 今日の最初の1つ、クリア！</h3>
+                    <p style="color: #fff; margin: 8px 0 0 0;">その調子！ あと2つでデイリー達成だよ！</p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.toast("🌟 今日の最初の1つ、クリア！ その調子！", icon="⭐")
             if event_gold != 0:
-                st.toast(f"{event_msg} {'+' if event_gold > 0 else ''}{event_gold} G")
-            time.sleep(0.5); st.rerun()
+                st.toast(f"{event_msg} {'+' if event_gold > 0 else ''}{event_gold} G", icon="📦" if event_gold > 0 else "⚠️")
+            if random_box_reward:
+                st.markdown(f"""
+                <div style="background: rgba(255, 192, 203, 0.3); border: 2px solid #ff69b4; border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center;">
+                    <h3 style="color: #ff69b4; margin: 0;">🎁 サプライズボックス！</h3>
+                    <p style="color: #fff; margin: 8px 0 0 0;">{random_box_reward[2]}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.toast(f"🎁 サプライズボックス！ {random_box_reward[2]}", icon="🎁")
+            
+            # ミッション進捗チェック（セッション状態に保存して次回表示）
+            new_d_cnt = d_cnt + 1
+            st.session_state.mission_check = {
+                "daily_count": new_d_cnt,
+                "weekly_count": w_cnt + 1,
+                "today": str(today)
+            }
+            
+            # 小さな成功の可視化（ADHD向け）
+            if new_d_cnt == 1:
+                st.info("💪 **1つ完了！** あと2つでデイリー達成！")
+            elif new_d_cnt == 2:
+                st.warning("🔥 **2つ完了！** あと1つでデイリー達成！ もう少し！")
+            elif new_d_cnt >= 3:
+                st.success("🎯 **デイリー達成！** すごい！ 報酬を受け取ろう！")
+            
+            # ADHD向け：次のタスクへの動機付け
+            if new_d_cnt < 3:
+                st.markdown(f"""
+                <div style="background: rgba(102, 126, 234, 0.2); border: 2px solid #667eea; border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center;">
+                    <p style="color: #fff; margin: 0; font-size: 1.1rem;">💪 すごい！ あと{3-new_d_cnt}つでデイリー達成だよ！</p>
+                    <p style="color: #c9b896; margin: 8px 0 0 0; font-size: 0.9em;">でも、今やめたって全然OK。無理しないでね。</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            time.sleep(2.5); st.rerun()
 
     # --- 3. ダンジョン & ボス ---
     floor = min(MAX_FLOOR, max(1, _int(user.get('dungeon_floor'))))
-    b_class, b_name = get_biome_html(floor)
-    dungeon_flavor = random.choice([
-        "奥から冷たい風が流れてくる……", "足元の石がきしむ。", "どこかで水が滴っている。",
-        "松明の光が壁を揺らす。", "深く潜るほど、空気が重くなる。",
-    ])
+    b_class, b_name, bg_color1, bg_color2 = get_biome_html(floor)
+    
+    # 階層に応じたダンジョンの雰囲気テキスト
+    biome_flavors = {
+        1: ["入口の洞窟が広がる", "薄暗い光が差し込む", "足音が響く"],
+        2: ["暗闇が深まる", "何かが動く気配が", "冷たい空気が流れる"],
+        3: ["石の壁が続く", "迷宮のような構造", "どこかで水が滴る"],
+        4: ["水晶が輝いている", "神秘的な光が満ちる", "静寂が支配する"],
+        5: ["熱気が立ち込める", "溶岩の音が響く", "危険な雰囲気"],
+        6: ["氷が張りつめている", "冷気が肌を刺す", "白い世界が広がる"],
+        7: ["影が蠢いている", "不気味な静けさ", "闇が深まる"],
+        8: ["魔法の光が舞う", "不思議な力が満ちる", "幻想的な空間"],
+        9: ["深淵の底へ", "圧迫感が増す", "未知の領域"],
+        10: ["王座の間へ", "最終領域", "魔王が待つ"],
+    }
+    biome_num = ((floor - 1) // 10) + 1
+    flavors = biome_flavors.get(biome_num, biome_flavors[10])
+    dungeon_flavor = random.choice(flavors)
+    
+    # 動的に背景を設定（RPGダンジョン風 - より本格的）
+    st.markdown(f"""
+    <style>
+    .stApp {{
+        background: linear-gradient(180deg, {bg_color1} 0%, {bg_color2} 100%) !important;
+        background-image:
+            /* レンガ・石の壁の質感（縦横の線） */
+            repeating-linear-gradient(90deg, 
+                rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px,
+                transparent 1px, transparent 4px,
+                rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 5px,
+                transparent 5px, transparent 8px,
+                rgba(0,0,0,0.12) 8px, rgba(0,0,0,0.12) 9px,
+                transparent 9px, transparent 12px
+            ),
+            repeating-linear-gradient(0deg, 
+                rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px,
+                transparent 1px, transparent 4px,
+                rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 5px,
+                transparent 5px, transparent 8px,
+                rgba(0,0,0,0.12) 8px, rgba(0,0,0,0.12) 9px,
+                transparent 9px, transparent 12px
+            ),
+            /* レンガのブロックパターン（斜めの線） */
+            repeating-linear-gradient(45deg, 
+                transparent 0px, transparent 24px,
+                rgba(0,0,0,0.05) 24px, rgba(0,0,0,0.05) 25px,
+                transparent 25px, transparent 48px
+            ),
+            repeating-linear-gradient(-45deg, 
+                transparent 0px, transparent 24px,
+                rgba(0,0,0,0.05) 24px, rgba(0,0,0,0.05) 25px,
+                transparent 25px, transparent 48px
+            ),
+            /* 暗闇の雰囲気（控えめに・コンテンツを隠さない） */
+            radial-gradient(ellipse at 20% 15%, rgba(0,0,0,0.25) 0%, transparent 60%),
+            radial-gradient(ellipse at 80% 85%, rgba(0,0,0,0.2) 0%, transparent 60%),
+            radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0.15) 0%, transparent 80%),
+            /* 松明・光の効果（ダンジョンらしさ） */
+            radial-gradient(circle at 15% 25%, rgba(139, 115, 85, 0.25) 0%, transparent 35%),
+            radial-gradient(circle at 85% 75%, rgba(201, 162, 39, 0.2) 0%, transparent 35%),
+            radial-gradient(circle at 50% 10%, rgba(139, 115, 85, 0.15) 0%, transparent 30%),
+            /* 床の石の質感 */
+            repeating-linear-gradient(0deg, 
+                rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 1px,
+                transparent 1px, transparent 16px,
+                rgba(0,0,0,0.1) 16px, rgba(0,0,0,0.1) 17px,
+                transparent 17px, transparent 32px
+            ),
+            repeating-linear-gradient(90deg, 
+                rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px,
+                transparent 1px, transparent 16px,
+                rgba(0,0,0,0.08) 16px, rgba(0,0,0,0.08) 17px,
+                transparent 17px, transparent 32px
+            ),
+            /* 壁のひび割れ風 */
+            repeating-linear-gradient(30deg, 
+                transparent 0px, transparent 40px,
+                rgba(0,0,0,0.03) 40px, rgba(0,0,0,0.03) 41px,
+                transparent 41px, transparent 80px
+            ),
+            repeating-linear-gradient(-30deg, 
+                transparent 0px, transparent 40px,
+                rgba(0,0,0,0.03) 40px, rgba(0,0,0,0.03) 41px,
+                transparent 41px, transparent 80px
+            ) !important;
+        position: relative;
+    }}
+    /* 背景レイヤーは背面に（コンテンツを隠さない） */
+    .stApp::before {{
+        content: '';
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: repeating-linear-gradient(45deg, transparent 0px, transparent 48px, rgba(139, 115, 85, 0.03) 48px, rgba(139, 115, 85, 0.03) 49px, transparent 49px, transparent 96px);
+        pointer-events: none;
+        z-index: -1;
+    }}
+    .stApp::after {{
+        content: '';
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(circle at 25% 30%, rgba(201, 162, 39, 0.08) 0%, transparent 25%), radial-gradient(circle at 75% 70%, rgba(139, 115, 85, 0.06) 0%, transparent 25%);
+        pointer-events: none;
+        z-index: -1;
+    }}
+    /* 本文エリアを前面に */
+    .stApp [data-testid="stAppViewContainer"],
+    .stApp .main .block-container {{ position: relative; z-index: 1; }}
+    </style>
+    """, unsafe_allow_html=True)
+    
     st.markdown(f"""
     <div class="{b_class}">
         <h3>📍 {b_name} (階層 {floor}/{MAX_FLOOR})</h3>
@@ -714,27 +1248,103 @@ def main():
         
         w_boss = get_weekly_boss()
         boss_max = w_boss['hp']
-        boss_cur = max(0, boss_max - _int(user.get('weekly_boss_damage')))
+        boss_dmg = _int(user.get('weekly_boss_damage'))
+        boss_cur = max(0, boss_max - boss_dmg)
         boss_pct = (boss_cur / boss_max) * 100
+        boss_defeated = (boss_cur == 0)
+        boss_claimed = (str(user.get('boss_claimed')) == wk_id)
         
         c_boss1, c_boss2 = st.columns([1, 2])
         with c_boss1:
-            st.image(get_monster_url(w_boss['seed'], "UR"), width=120)
+            emoji, color = get_monster_display(w_boss['name'], "UR")
+            st.markdown(f'<div style="font-size: 96px; text-align: center; background: {color}20; border-radius: 8px; padding: 16px;">{emoji}</div>', unsafe_allow_html=True)
         with c_boss2:
             st.markdown(f"**☠️ WANTED: {w_boss['name']}**")
             st.markdown(f"""<div class="bar-bg"><div class="bar-fill-hp" style="width:{boss_pct}%;"></div></div>""", unsafe_allow_html=True)
             st.caption(f"HP: {boss_cur}/{boss_max} (弱点: {w_boss['desc']})")
-            if boss_cur == 0: st.success("🎉 討伐完了！")
+            if boss_defeated:
+                st.success("🎉 討伐完了！")
+                st.markdown(f"""
+                <div style="background: rgba(40,32,24,0.95); border: 2px solid #c9a227; border-radius: 8px; padding: 10px; margin: 8px 0;">
+                    <strong>💰 討伐報酬</strong><br>
+                    <span style="color: #c9b896;">ゴールド: {w_boss.get('reward', 1000)}G</span><br>
+                    <span style="color: #c9b896;">経験値: {w_boss.get('reward_xp', 500)}XP</span>
+                </div>
+                """, unsafe_allow_html=True)
+                if not boss_claimed:
+                    if st.button(f"🎁 討伐報酬を受け取る ({w_boss.get('reward', 1000)}G + {w_boss.get('reward_xp', 500)}XP)", key="boss_reward"):
+                        try:
+                            # 先にboss_claimedを更新してから報酬を追加（重複防止）
+                            ws_u.update_cell(u_idx, 27, wk_id)  # boss_claimed列を先に更新
+                            new_gold = _int(user.get('gold')) + w_boss.get('reward', 1000)
+                            new_xp = _int(user.get('current_xp')) + w_boss.get('reward_xp', 500)
+                            u_nxt_xp = _int(user.get('next_level_xp'), 100)
+                            u_lv = _int(user.get('level'), 1)
+                            ws_u.update_cell(u_idx, 6, new_gold)
+                            _apply_xp_gain(ws_u, u_idx, new_xp, u_nxt_xp, u_lv)
+                            st.success(f"{w_boss.get('reward', 1000)}G + {w_boss.get('reward_xp', 500)}XP 獲得！"); time.sleep(0.2); st.rerun()
+                        except Exception as e:
+                            st.error(f"ボス討伐報酬の保存に失敗しました。スプレッドシートの列AA(27)に「boss_claimed」列があるか確認してください。エラー: {str(e)}")
+                            st.stop()
+                else:
+                    st.caption("✅ 今週の討伐報酬は受取済み")
+            else:
+                st.caption(f"💡 討伐すると {w_boss.get('reward', 1000)}G + {w_boss.get('reward_xp', 500)}XP 獲得！")
 
     st.markdown("---")
 
     # --- 4. タブ機能 ---
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 ギルド", "💎 ショップ", "📊 記録", "🎒 倉庫"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📋 ギルド", "💎 ショップ", "🏆 実績", "📚 図鑑", "📊 統計", "📊 記録", "🎒 倉庫"])
 
     with tab1:
         c_g1, c_g2 = st.columns(2)
         with c_g1:
             st.subheader("📋 デイリー・ウィークリークエスト")
+            
+            # ミッション（短期目標）
+            st.markdown("#### 🎯 ミッション")
+            mission_claimed = user.get('mission_claimed', '').split(',') if user.get('mission_claimed') else []
+            mission_claimed_set = set([m.strip() for m in mission_claimed if m.strip()])
+            
+            for mission_id, mission_data in MISSIONS.items():
+                if mission_data['type'] == 'daily':
+                    progress = d_cnt
+                    target = mission_data['target']
+                    is_done = progress >= target
+                    is_claimed = mission_id in mission_claimed_set
+                else:  # weekly
+                    progress = w_cnt
+                    target = mission_data['target']
+                    is_done = progress >= target
+                    is_claimed = mission_id in mission_claimed_set
+                
+                border_color = "#c9a227" if is_done and not is_claimed else "#555" if is_done else "#333"
+                st.markdown(f"""
+                <div style="background: rgba(30,28,24,0.9); border: 2px solid {border_color}; border-radius: 8px; padding: 10px; margin: 6px 0;">
+                    <div style="display:flex; justify-content:space-between;">
+                        <strong>{mission_data['name']}</strong>
+                        <span style="color: #c9a227;">{mission_data['reward']}G</span>
+                    </div>
+                    <p style="margin: 4px 0; color: #c9b896; font-size: 0.9em;">{mission_data['desc']}</p>
+                    <div class="bar-bg" style="height: 8px; margin: 4px 0;"><div class="bar-fill-xp" style="width: {min(100, progress/target*100)}%; height: 100%;"></div></div>
+                    <p style="margin: 0; font-size: 0.85em;">進捗 {progress}/{target}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if is_done and not is_claimed:
+                    if st.button(f"🎁 {mission_data['reward']}G を受け取る", key=f"mission_{mission_id}"):
+                        try:
+                            # 先にmission_claimedを更新してから報酬を追加（重複防止）
+                            new_claimed = ','.join(list(mission_claimed_set) + [mission_id]).strip(',')
+                            ws_u.update_cell(u_idx, 26, new_claimed)  # mission_claimed列を先に更新
+                            new_gold = _int(user.get('gold')) + mission_data['reward']
+                            ws_u.update_cell(u_idx, 6, new_gold)
+                            st.success(f"{mission_data['reward']}G 獲得！"); time.sleep(0.2); st.rerun()
+                        except Exception as e:
+                            st.error(f"ミッション報酬の保存に失敗しました。スプレッドシートの列Z(26)に「mission_claimed」列があるか確認してください。エラー: {str(e)}")
+                            st.stop()
+            
+            st.markdown("---")
             # デイリークエストカード
             d_done = d_cnt >= 3
             d_class = "quest-card-done" if d_done and d_claim else "quest-card"
@@ -752,9 +1362,15 @@ def main():
             """, unsafe_allow_html=True)
             if d_done and not d_claim:
                 if st.button("🎁 200G を受け取る", key="daily_claim"):
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) + 200)
-                    ws_u.update_cell(u_idx, 14, str(today))
-                    st.success("200G 獲得！"); time.sleep(0.5); st.rerun()
+                    try:
+                        # 先にdaily_claimedを更新してから報酬を追加（重複防止）
+                        ws_u.update_cell(u_idx, 14, str(today))  # daily_claimed列を先に更新
+                        new_gold = _int(user.get('gold')) + 200
+                        ws_u.update_cell(u_idx, 6, new_gold)
+                        st.success("200G 獲得！"); time.sleep(0.2); st.rerun()
+                    except Exception as e:
+                        st.error(f"デイリー報酬の保存に失敗しました。スプレッドシートの列N(14)に「daily_claimed」列があるか確認してください。エラー: {str(e)}")
+                        st.stop()
             elif d_claim:
                 st.caption("✅ 本日分は受取済み")
 
@@ -774,9 +1390,15 @@ def main():
             """, unsafe_allow_html=True)
             if w_done and not w_claim:
                 if st.button("🎁 500G を受け取る", key="weekly_claim"):
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) + 500)
-                    ws_u.update_cell(u_idx, 15, wk_id)
-                    st.success("500G 獲得！"); time.sleep(0.5); st.rerun()
+                    try:
+                        # 先にweekly_claimedを更新してから報酬を追加（重複防止）
+                        ws_u.update_cell(u_idx, 15, wk_id)  # weekly_claimed列を先に更新
+                        new_gold = _int(user.get('gold')) + 500
+                        ws_u.update_cell(u_idx, 6, new_gold)
+                        st.success("500G 獲得！"); time.sleep(0.2); st.rerun()
+                    except Exception as e:
+                        st.error(f"ウィークリー報酬の保存に失敗しました。スプレッドシートの列O(15)に「weekly_claimed」列があるか確認してください。エラー: {str(e)}")
+                        st.stop()
             elif w_claim:
                 st.caption("✅ 今週分は受取済み")
 
@@ -823,34 +1445,121 @@ def main():
             st.caption("週1回のみ！定価1000G相当（20%OFF）")
             if st.button("購入（今週分）", key="weekly_ticket", disabled=not can_weekly_ticket):
                 if can_weekly_ticket and _int(user.get('gold')) >= 800:
+                    # ガチャ演出
+                    st.markdown("### 🎰 10連召喚中...")
+                    st.progress(1.0)
+                    
                     results = [gacha_draw() for _ in range(10)]
+                    df_i_check = pd.DataFrame(ws_i.get_all_records())
+                    total_piece_gold = 0
+                    new_monsters = []
+                    rarity_counts = {"N": 0, "R": 0, "SR": 0, "SSR": 0, "UR": 0}
+                    
                     for m_key in results:
                         m_data = MONSTERS[m_key]
-                        ws_i.append_row(['u001', m_key, m_data['rarity'], 1, str(datetime.now())])
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 800)
+                        rarity = m_data['rarity']
+                        rarity_counts[rarity] = rarity_counts.get(rarity, 0) + 1
+                        already_has = not df_i_check.empty and len(df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]) > 0
+                        if already_has:
+                            # 重複時は自動的にレベルアップに使用
+                            monster_row = df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]
+                            if not monster_row.empty:
+                                current_level = _int(monster_row.iloc[0].get('quantity', 1))
+                                if current_level < 10:
+                                    new_level = current_level + 1
+                                    monster_idx = monster_row.index[0] + 2
+                                    ws_i.update_cell(monster_idx, 4, new_level)
+                                    new_monsters.append(f"{m_key} Lv.{new_level}↑")
+                                else:
+                                    # 最大レベル時はゴールドに変換
+                                    piece_gold = {"N": 10, "R": 30, "SR": 100, "SSR": 300, "UR": 1000}.get(rarity, 10)
+                                    total_piece_gold += piece_gold
+                            df_i_check = pd.DataFrame(ws_i.get_all_records())
+                        else:
+                            ws_i.append_row(['u001', m_key, rarity, 1, str(datetime.now())])
+                            new_monsters.append(m_key)
+                            df_i_check = pd.DataFrame(ws_i.get_all_records())
+                    
+                    new_gold = _int(user.get('gold')) - 800 + total_piece_gold
+                    ws_u.update_cell(u_idx, 6, new_gold)
                     try: ws_u.update_cell(u_idx, 22, wk_id)
                     except: pass
                     st.session_state.last_gacha_10 = results
-                    st.success("10連召喚！"); time.sleep(0.8); st.rerun()
+                    st.session_state.last_gacha_10_info = {"new": new_monsters, "pieces": total_piece_gold, "rarity_counts": rarity_counts}
+                    
+                    # 演出
+                    st.balloons()
+                    st.success("🎉 10連召喚完了！")
+                    rarity_display = " ".join([f"{r}: {c}" for r, c in rarity_counts.items() if c > 0])
+                    st.info(f"結果: {rarity_display}")
+                    if new_monsters:
+                        st.success(f"獲得: {', '.join(new_monsters[:5])}{'...' if len(new_monsters) > 5 else ''}")
+                    if total_piece_gold > 0:
+                        st.info(f"最大レベル変換: {total_piece_gold}G")
+                    time.sleep(2.0); st.rerun()
                 elif not can_weekly_ticket: st.warning("今週は購入済み")
                 else: st.error("金貨不足")
             if not can_weekly_ticket: st.caption("✅ 今週は購入済み")
         with lim2:
             st.markdown("**✨ SR以上確定チケット** — 600G")
             st.caption("月1回のみ！SR 80% / SSR 19% / UR 1%")
-            if st.button("購入（今月分）", key="monthly_sr", disabled=not can_monthly_sr):
-                if can_monthly_sr and _int(user.get('gold')) >= 600:
+            monthly_sr_key = f"monthly_sr_claimed_{month_id}"
+            monthly_sr_claimed = monthly_sr_key in st.session_state
+            if st.button("購入（今月分）", key="monthly_sr", disabled=(not can_monthly_sr or monthly_sr_claimed)):
+                if can_monthly_sr and not monthly_sr_claimed and _int(user.get('gold')) >= 600:
+                    # SR確定ガチャ演出
+                    st.markdown("### ✨ SR以上確定召喚中...")
+                    st.session_state[monthly_sr_key] = True
+                    
                     m_key = gacha_draw_sr_guaranteed()
                     m_data = MONSTERS[m_key]
-                    ws_i.append_row(['u001', m_key, m_data['rarity'], 1, str(datetime.now())])
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
-                    try: ws_u.update_cell(u_idx, 23, month_id)
-                    except: pass
-                    st.session_state.last_gacha_result = (m_key, m_data['rarity'])
-                    st.success(f"{m_key} GET!"); time.sleep(0.8); st.rerun()
+                    rarity = m_data['rarity']
+                    
+                    # レアリティに応じた演出
+                    if rarity == "UR":
+                        st.balloons()
+                        st.success("🌟✨ **URレア獲得！** ✨🌟")
+                    elif rarity == "SSR":
+                        st.success("💎 **SSRレア獲得！** 💎")
+                    else:
+                        st.info("⭐ **SRレア獲得！** ⭐")
+                    
+                    df_i_check = pd.DataFrame(ws_i.get_all_records())
+                    already_has = not df_i_check.empty and len(df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]) > 0
+                    if already_has:
+                        # 重複時は自動的にレベルアップに使用
+                        monster_row = df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]
+                        if not monster_row.empty:
+                            current_level = _int(monster_row.iloc[0].get('quantity', 1))
+                            if current_level < 10:
+                                new_level = current_level + 1
+                                monster_idx = monster_row.index[0] + 2
+                                ws_i.update_cell(monster_idx, 4, new_level)
+                                ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
+                                try: ws_u.update_cell(u_idx, 23, month_id)
+                                except: pass
+                                st.success(f"重複！{m_key} がレベル{new_level}に上がった！")
+                            else:
+                                # 最大レベル時はゴールドに変換
+                                piece_gold = {"N": 10, "R": 30, "SR": 100, "SSR": 300, "UR": 1000}.get(rarity, 100)
+                                new_gold = _int(user.get('gold')) - 600 + piece_gold
+                                ws_u.update_cell(u_idx, 6, new_gold)
+                                try: ws_u.update_cell(u_idx, 23, month_id)
+                                except: pass
+                                st.info(f"重複！{m_key}は最大レベルなので {piece_gold}G に変換")
+                        time.sleep(1.0); st.rerun()
+                    else:
+                        ws_i.append_row(['u001', m_key, rarity, 1, str(datetime.now())])
+                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
+                        try: ws_u.update_cell(u_idx, 23, month_id)
+                        except: pass
+                        st.session_state.last_gacha_result = (m_key, rarity, False, 0)
+                        st.success(f"🎉 {m_key} GET!")
+                        time.sleep(1.0); st.rerun()
+                elif monthly_sr_claimed: st.warning("今月は購入済み")
                 elif not can_monthly_sr: st.warning("今月は購入済み")
                 else: st.error("金貨不足")
-            if not can_monthly_sr: st.caption("✅ 今月は購入済み")
+            if not can_monthly_sr or monthly_sr_claimed: st.caption("✅ 今月は購入済み")
 
         st.markdown("#### 🌟 通常召喚")
         col_g1, col_g2 = st.columns(2)
@@ -862,21 +1571,78 @@ def main():
                 if not is_free and _int(user.get('gold')) < 100:
                     st.error("金貨が足りません")
                 else:
+                    # ガチャ演出
+                    st.markdown("### ✨ 召喚中...")
+                    st.progress(1.0)
+                    
                     m_key = gacha_draw()
                     m_data = MONSTERS[m_key]
-                    ws_i.append_row(['u001', m_key, m_data['rarity'], 1, str(datetime.now())])
-                    if is_free: ws_u.update_cell(u_idx, 13, str(today))
-                    else: ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 100)
-                    r = m_data['rarity']
-                    st.session_state.last_gacha_result = (m_key, r)
-                    st.rerun()
+                    rarity = m_data['rarity']
+                    
+                    # レアリティに応じた演出
+                    if rarity == "UR":
+                        st.balloons()
+                        st.success("🌟✨ **URレア獲得！** ✨🌟")
+                    elif rarity == "SSR":
+                        st.success("💎 **SSRレア獲得！** 💎")
+                    elif rarity == "SR":
+                        st.info("⭐ **SRレア獲得！** ⭐")
+                    
+                    # 重複チェック
+                    df_i_check = pd.DataFrame(ws_i.get_all_records())
+                    already_has = not df_i_check.empty and len(df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]) > 0
+                    
+                    if already_has:
+                        # 重複時は自動的にレベルアップに使用
+                        monster_row = df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]
+                        if not monster_row.empty:
+                            current_level = _int(monster_row.iloc[0].get('quantity', 1))
+                            if current_level < 10:
+                                new_level = current_level + 1
+                                monster_idx = monster_row.index[0] + 2
+                                ws_i.update_cell(monster_idx, 4, new_level)
+                                if not is_free: ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 100)
+                                if is_free: ws_u.update_cell(u_idx, 13, str(today))
+                                st.success(f"重複！{m_key} がレベル{new_level}に上がった！")
+                            else:
+                                # 最大レベル時はゴールドに変換
+                                piece_gold = {"N": 10, "R": 30, "SR": 100, "SSR": 300, "UR": 1000}.get(rarity, 10)
+                                new_gold = _int(user.get('gold')) + piece_gold
+                                if not is_free: new_gold -= 100
+                                ws_u.update_cell(u_idx, 6, new_gold)
+                                if is_free: ws_u.update_cell(u_idx, 13, str(today))
+                                st.info(f"重複！{m_key}は最大レベルなので {piece_gold}G に変換")
+                        time.sleep(1.0); st.rerun()
+                    else:
+                        # 新規：通常追加
+                        ws_i.append_row(['u001', m_key, rarity, 1, str(datetime.now())])
+                        if is_free: ws_u.update_cell(u_idx, 13, str(today))
+                        else: ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 100)
+                        st.session_state.last_gacha_result = (m_key, rarity, False, 0)
+                        st.success(f"🎉 {m_key} GET!")
+                        time.sleep(1.0); st.rerun()
             if st.session_state.get('last_gacha_result'):
-                mk, r = st.session_state.last_gacha_result
-                md = MONSTERS[mk]
-                skill_desc = md.get('skill_desc', md.get('skill_name', md['skill']))
-                st.markdown(f'<span class="rarity-{r}">★ {r} ★</span> {mk}', unsafe_allow_html=True)
-                st.image(get_monster_url(md['seed'], r), width=80)
-                st.caption(f"効果: {skill_desc}")
+                result = st.session_state.last_gacha_result
+                if len(result) == 4:  # 重複処理あり
+                    mk, r, is_dupe, piece_gold = result
+                    md = MONSTERS[mk]
+                    if is_dupe:
+                        st.warning(f"重複！{mk} → ピース変換で {piece_gold}G 獲得")
+                        emoji, color = get_monster_display(mk, r)
+                        st.markdown(f'<div style="font-size: 48px; text-align: center; background: {color}20; border-radius: 8px; padding: 8px;">{emoji}</div>', unsafe_allow_html=True)
+                    else:
+                        skill_desc = md.get('skill_desc', md.get('skill_name', md['skill']))
+                        st.markdown(f'<span class="rarity-{r}">★ {r} ★</span> {mk}', unsafe_allow_html=True)
+                        emoji, color = get_monster_display(mk, r)
+                        st.markdown(f'<div style="font-size: 48px; text-align: center; background: {color}20; border-radius: 8px; padding: 8px;">{emoji}</div>', unsafe_allow_html=True)
+                        st.caption(f"効果: {skill_desc}")
+                else:  # 旧形式（後方互換）
+                    mk, r = result
+                    md = MONSTERS[mk]
+                    skill_desc = md.get('skill_desc', md.get('skill_name', md['skill']))
+                    st.markdown(f'<span class="rarity-{r}">★ {r} ★</span> {mk}', unsafe_allow_html=True)
+                    st.image(get_monster_url(md['seed'], r, mk), width=80)
+                    st.caption(f"効果: {skill_desc}")
 
         with col_g2:
             st.markdown("**✨ 10連召喚（お得）**")
@@ -886,28 +1652,45 @@ def main():
                     st.error("金貨が足りません（900G必要）")
                 else:
                     results = [gacha_draw() for _ in range(10)]
+                    df_i_check = pd.DataFrame(ws_i.get_all_records())
+                    total_piece_gold = 0
+                    new_monsters = []
                     for m_key in results:
                         m_data = MONSTERS[m_key]
-                        ws_i.append_row(['u001', m_key, m_data['rarity'], 1, str(datetime.now())])
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 900)
+                        already_has = not df_i_check.empty and len(df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]) > 0
+                        if already_has:
+                            piece_gold = {"N": 10, "R": 30, "SR": 100, "SSR": 300, "UR": 1000}.get(m_data['rarity'], 10)
+                            total_piece_gold += piece_gold
+                        else:
+                            ws_i.append_row(['u001', m_key, m_data['rarity'], 1, str(datetime.now())])
+                            new_monsters.append(m_key)
+                            df_i_check = pd.DataFrame(ws_i.get_all_records())  # 更新
+                    new_gold = _int(user.get('gold')) - 900 + total_piece_gold
+                    ws_u.update_cell(u_idx, 6, new_gold)
                     st.session_state.last_gacha_10 = results
+                    st.session_state.last_gacha_10_info = {"new": new_monsters, "pieces": total_piece_gold}
                     st.rerun()
             if st.session_state.get('last_gacha_10'):
                 res = st.session_state.last_gacha_10
+                info = st.session_state.get('last_gacha_10_info', {"new": res, "pieces": 0})
                 ur_c = sum(1 for mk in res if MONSTERS[mk]['rarity']=='UR')
                 ssr_c = sum(1 for mk in res if MONSTERS[mk]['rarity']=='SSR')
                 sr_c = sum(1 for mk in res if MONSTERS[mk]['rarity']=='SR')
                 r_c = sum(1 for mk in res if MONSTERS[mk]['rarity']=='R')
                 n_c = 10 - ur_c - ssr_c - sr_c - r_c
-                st.success(f"10連 — UR:{ur_c} SSR:{ssr_c} SR:{sr_c} R:{r_c} N:{n_c}")
+                piece_msg = f" ピース: {info['pieces']}G" if info['pieces'] > 0 else ""
+                st.success(f"10連 — UR:{ur_c} SSR:{ssr_c} SR:{sr_c} R:{r_c} N:{n_c}{piece_msg}")
                 cols = st.columns(5)
                 for i, m_key in enumerate(res):
                     with cols[i % 5]:
                         md = MONSTERS[m_key]
                         r = md['rarity']
-                        st.markdown(f'<span class="rarity-{r}">{r}</span>', unsafe_allow_html=True)
-                        st.image(get_monster_url(md['seed'], r), width=60)
-                        st.caption(m_key)
+                        is_new = m_key in info.get('new', [])
+                        label = f'<span class="rarity-{r}">{r}</span>' + (" ✨" if is_new else " 🔄")
+                        st.markdown(label, unsafe_allow_html=True)
+                        emoji, color = get_monster_display(m_key, r)
+                        st.markdown(f'<div style="font-size: 36px; text-align: center; background: {color}20; border-radius: 8px; padding: 4px;">{emoji}</div>', unsafe_allow_html=True)
+                        st.caption(m_key + (" (新規)" if is_new else " (重複→ピース)"))
 
         st.divider()
         st.subheader("🎒 相棒編成")
@@ -931,52 +1714,309 @@ def main():
 
         st.divider()
         st.markdown("#### 🛒 便利アイテム")
-        st.markdown("**📜 経験値アイテム**")
-        xp1, xp2, xp3 = st.columns(3)
-        with xp1:
-            st.caption("経験値の書 100G → 150 XP")
-            if st.button("購入", key="item_xp"):
-                if _int(user.get('gold')) >= 100:
-                    u_cur_xp, u_nxt_xp = _int(user.get('current_xp')), _int(user.get('next_level_xp'), 100)
-                    u_lv = _int(user.get('level'), 1)
-                    new_xp = u_cur_xp + 150
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 100)
-                    _apply_xp_gain(ws_u, u_idx, new_xp, u_nxt_xp, u_lv)
-                    st.success("150 XP 獲得！"); time.sleep(0.5); st.rerun()
+        it1, it2, it3 = st.columns(3)
+        with it1:
+            st.markdown("**⚡ スタミナポーション** — 150G")
+            st.caption("デイリークエスト進捗+1（最大3まで）")
+            if st.button("購入", key="item_stamina"):
+                if _int(user.get('gold')) >= 150:
+                    if d_cnt < 3:
+                        fake_task_id = str(uuid.uuid4())
+                        ws_t.append_row([fake_task_id, 'u001', 'スタミナポーション使用', 'item', 1, 'Completed', str(datetime.now())])
+                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 150)
+                        st.success("デイリー進捗+1！"); time.sleep(0.5); st.rerun()
+                    else:
+                        st.warning("デイリーは既に達成済み")
                 else: st.error("金貨不足")
-        with xp2:
-            st.caption("冒険の証 300G → 500 XP")
-            if st.button("購入", key="item_xp2"):
+        with it2:
+            st.markdown("**🔥 ボス討伐の書** — 200G")
+            st.caption("週間ボスダメージ+500")
+            if st.button("購入", key="item_boss_dmg"):
+                if _int(user.get('gold')) >= 200:
+                    current_dmg = _int(user.get('weekly_boss_damage'))
+                    ws_u.update_cell(u_idx, 19, current_dmg + 500)
+                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 200)
+                    st.success("ボスダメージ+500！"); time.sleep(0.5); st.rerun()
+                else: st.error("金貨不足")
+        with it3:
+            st.markdown("**📈 階層スキップ** — 300G")
+            st.caption("階層+5（最大100階まで）")
+            if st.button("購入", key="item_floor_skip"):
                 if _int(user.get('gold')) >= 300:
-                    u_cur_xp, u_nxt_xp = _int(user.get('current_xp')), _int(user.get('next_level_xp'), 100)
-                    u_lv = _int(user.get('level'), 1)
-                    new_xp = u_cur_xp + 500
+                    current_floor = _int(user.get('dungeon_floor'))
+                    new_floor = min(MAX_FLOOR, current_floor + 5)
+                    ws_u.update_cell(u_idx, 8, new_floor)
                     ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 300)
-                    _apply_xp_gain(ws_u, u_idx, new_xp, u_nxt_xp, u_lv)
-                    st.success("500 XP 獲得！"); time.sleep(0.5); st.rerun()
+                    st.success(f"階層 {current_floor} → {new_floor}！"); time.sleep(0.5); st.rerun()
                 else: st.error("金貨不足")
-        with xp3:
-            st.caption("伝説の書 800G → 1500 XP")
-            if st.button("購入", key="item_xp3"):
-                if _int(user.get('gold')) >= 800:
-                    u_cur_xp, u_nxt_xp = _int(user.get('current_xp')), _int(user.get('next_level_xp'), 100)
-                    u_lv = _int(user.get('level'), 1)
-                    new_xp = u_cur_xp + 1500
-                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 800)
-                    _apply_xp_gain(ws_u, u_idx, new_xp, u_nxt_xp, u_lv)
-                    st.success("1500 XP 獲得！"); time.sleep(0.5); st.rerun()
+        
+        st.markdown("#### 💎 実用的アイテム（リアルでプラスになる）")
+        util1, util2, util3 = st.columns(3)
+        with util1:
+            st.markdown("**🛡️ ストリーク保護** — 250G")
+            st.caption("今日タスクをしなくても連続記録が途切れない（1回のみ）")
+            if st.button("購入", key="item_streak_protect"):
+                if _int(user.get('gold')) >= 250:
+                    # ストリーク保護フラグを設定（列28に保存）
+                    try:
+                        ws_u.update_cell(u_idx, 28, str(today))  # streak_protect_date列
+                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 250)
+                        st.success("ストリーク保護が有効になりました！"); time.sleep(0.5); st.rerun()
+                    except:
+                        st.error("保存に失敗（列AB(28)にstreak_protect_date列を追加してください）")
+                else: st.error("金貨不足")
+        with util2:
+            st.markdown("**📝 タスクメモ** — 100G")
+            st.caption("今日のタスクをメモできる（最大5つまで）")
+            if st.button("購入", key="item_task_memo"):
+                if _int(user.get('gold')) >= 100:
+                    st.info("タスクメモ機能は準備中です")
+                    # 将来的に実装：タスクメモ機能
+                else: st.error("金貨不足")
+        with util3:
+            st.markdown("**⏰ リマインダー設定** — 150G")
+            st.caption("タスクリマインダーを設定できる（1週間有効）")
+            if st.button("購入", key="item_reminder"):
+                if _int(user.get('gold')) >= 150:
+                    st.info("リマインダー機能は準備中です")
+                    # 将来的に実装：リマインダー機能
+                else: st.error("金貨不足")
+        
+        st.markdown("#### ✨ 限定バフ")
+        buf1, buf2, buf3 = st.columns(3)
+        with buf1:
+            st.caption("ゴールドバフ 400G（次の3タスクで報酬+50%）")
+            if st.button("購入", key="item_gold_buff"):
+                if _int(user.get('gold')) >= 400:
+                    buff_data = f"gold_50_3_{datetime.now().isoformat()}"
+                    try:
+                        ws_u.update_cell(u_idx, 24, buff_data)
+                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 400)
+                        st.success("次の3タスクで報酬+50%！"); time.sleep(0.5); st.rerun()
+                    except:
+                        st.error("バフ保存に失敗（列X(24)にbuff_data列を追加してください）")
+                else: st.error("金貨不足")
+        with buf2:
+            st.caption("経験値バフ 400G（次の3タスクで経験値+50%）")
+            if st.button("購入", key="item_xp_buff"):
+                if _int(user.get('gold')) >= 400:
+                    buff_data = f"xp_50_3_{datetime.now().isoformat()}"
+                    try:
+                        ws_u.update_cell(u_idx, 24, buff_data)
+                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 400)
+                        st.success("次の3タスクで経験値+50%！"); time.sleep(0.5); st.rerun()
+                    except:
+                        st.error("バフ保存に失敗（列X(24)にbuff_data列を追加してください）")
+                else: st.error("金貨不足")
+        with buf3:
+            st.caption("🎯 実績ブースト 500G（実績達成が2倍速になる）")
+            if st.button("購入", key="item_achievement_boost"):
+                if _int(user.get('gold')) >= 500:
+                    buff_data = f"achievement_2x_{datetime.now().isoformat()}"
+                    try:
+                        ws_u.update_cell(u_idx, 24, buff_data)
+                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 500)
+                        st.success("実績達成が2倍速になります！"); time.sleep(0.5); st.rerun()
+                    except:
+                        st.error("バフ保存に失敗（列X(24)にbuff_data列を追加してください）")
                 else: st.error("金貨不足")
 
-    with tab3: # 記録
+    with tab3:  # 実績
+        st.subheader("🏆 実績一覧")
+        achieved_list = user.get('achievements', '').split(',') if user.get('achievements') else []
+        achieved_set = set([a.strip() for a in achieved_list if a.strip()])
+        
+        total_tasks = len(df_t[df_t['user_id']=='u001']) if not df_t.empty else 0
+        floor = _int(user.get('dungeon_floor'))
+        rebirth = _int(user.get('rebirth_count'))
+        level = _int(user.get('level'), 1)
+        streak = calc_task_streak(df_t, user)
+        has_ur = False
+        if not df_i.empty:
+            user_items = df_i[df_i['user_id']=='u001']
+            if not user_items.empty:
+                has_ur = len(user_items[user_items['rarity']=='UR']) > 0
+        
+        for ach_id, ach_data in ACHIEVEMENTS.items():
+            is_done = ach_id in achieved_set
+            border_color = "#c9a227" if is_done else "#555"
+            bg_color = "rgba(40,32,24,0.95)" if is_done else "rgba(20,20,20,0.7)"
+            check = "✅" if is_done else "⭕"
+            
+            # 進捗チェック
+            progress = ""
+            if ach_id == "first_task": progress = f" ({total_tasks}/1)" if total_tasks < 1 else ""
+            elif ach_id == "task_10": progress = f" ({total_tasks}/10)" if total_tasks < 10 else ""
+            elif ach_id == "task_50": progress = f" ({total_tasks}/50)" if total_tasks < 50 else ""
+            elif ach_id == "task_100": progress = f" ({total_tasks}/100)" if total_tasks < 100 else ""
+            elif ach_id == "floor_10": progress = f" ({floor}/10)" if floor < 10 else ""
+            elif ach_id == "floor_50": progress = f" ({floor}/50)" if floor < 50 else ""
+            elif ach_id == "floor_100": progress = f" ({floor}/100)" if floor < 100 else ""
+            elif ach_id == "rebirth_1": progress = f" ({rebirth}/1)" if rebirth < 1 else ""
+            elif ach_id == "rebirth_5": progress = f" ({rebirth}/5)" if rebirth < 5 else ""
+            elif ach_id == "level_10": progress = f" ({level}/10)" if level < 10 else ""
+            elif ach_id == "level_20": progress = f" ({level}/20)" if level < 20 else ""
+            elif ach_id == "gacha_ur": progress = " (未獲得)" if not has_ur else ""
+            elif ach_id == "streak_7": progress = f" ({streak}/7)" if streak < 7 else ""
+            elif ach_id == "streak_30": progress = f" ({streak}/30)" if streak < 30 else ""
+            
+            st.markdown(f"""
+            <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 12px; margin: 8px 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span><strong>{check} {ach_data['icon']} {ach_data['name']}</strong></span>
+                    <span style="color: #c9a227;">報酬: {ach_data['reward']}G</span>
+                </div>
+                <p style="margin: 4px 0; color: #c9b896;">{ach_data['desc']}{progress}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.caption(f"達成率: {len(achieved_set)}/{len(ACHIEVEMENTS)} ({len(achieved_set)*100//len(ACHIEVEMENTS)}%)")
+
+    with tab4:  # 図鑑
+        st.subheader("📚 モンスター図鑑")
+        if not df_i.empty:
+            owned = set(df_i[df_i['user_id']=='u001']['item_name'].unique())
+        else:
+            owned = set()
+        
+        # レアリティ順に表示
+        rarity_order = ["UR", "SSR", "SR", "R", "N"]
+        for rarity in rarity_order:
+            st.markdown(f"### {rarity}レアリティ")
+            monsters_in_rarity = {k: v for k, v in MONSTERS.items() if v['rarity'] == rarity}
+            cols = st.columns(3)
+            for idx, (m_name, m_data) in enumerate(monsters_in_rarity.items()):
+                col = cols[idx % 3]
+                with col:
+                    is_owned = m_name in owned
+                    opacity = "1.0" if is_owned else "0.3"
+                    border = "2px solid #c9a227" if is_owned else "1px solid #555"
+                    emoji, color = get_monster_display(m_name, rarity)
+                    st.markdown(f"""
+                    <div style="background: rgba(30,28,24,0.9); border: {border}; border-radius: 8px; padding: 8px; margin: 4px 0; text-align: center; opacity: {opacity};">
+                        <div style="font-size: 64px; background: {color}20; border-radius: 8px; padding: 8px; margin-bottom: 8px;">{emoji}</div>
+                        <p style="margin: 4px 0; font-weight: bold;">{m_name}</p>
+                        <p style="margin: 0; font-size: 0.85em; color: #c9b896;">{m_data.get('skill_desc', m_data.get('skill_name', m_data['skill']))}</p>
+                        {"✅ 獲得済み" if is_owned else "❌ 未獲得"}
+                    </div>
+                    """, unsafe_allow_html=True)
+        st.caption(f"コレクション進捗: {len(owned)}/{len(MONSTERS)} ({len(owned)*100//len(MONSTERS)}%)")
+
+    with tab5:  # 統計
+        st.subheader("📊 統計・分析")
+        
+        # 基本統計
+        st.markdown("#### 📈 基本統計")
+        total_tasks = len(df_t[df_t['user_id']=='u001']) if not df_t.empty else 0
+        total_gold = _int(user.get('total_gold_earned', 0))
+        total_xp = _int(user.get('total_xp_earned', 0))
+        level = _int(user.get('level'), 1)
+        floor = _int(user.get('dungeon_floor'))
+        rebirth = _int(user.get('rebirth_count'))
+        streak = calc_task_streak(df_t, user)
+        login_streak = _int(user.get('login_streak'))
+        
+        # 所持モンスター数
+        owned_count = 0
+        if not df_i.empty:
+            owned_count = len(df_i[df_i['user_id']=='u001']['item_name'].unique())
+        
+        stat_cols = st.columns(3)
+        with stat_cols[0]:
+            st.metric("総タスク数", total_tasks)
+            st.metric("現在のレベル", level)
+            st.metric("現在の階層", floor)
+        with stat_cols[1]:
+            st.metric("総獲得ゴールド", f"{total_gold:,}G" if total_gold > 0 else "0G")
+            st.metric("転生回数", rebirth)
+            st.metric("タスク連続日数", f"{streak}日")
+        with stat_cols[2]:
+            st.metric("総獲得経験値", f"{total_xp:,}XP" if total_xp > 0 else "0XP")
+            st.metric("ログイン連続日数", f"{login_streak}日")
+            st.metric("所持モンスター数", owned_count)
+        
+        # 日別タスク数グラフ
+        if not df_t.empty:
+            st.markdown("#### 📅 日別タスク数")
+            daily = df_t.groupby(df_t['dt'].dt.date).size().reset_index(name='Actions')
+            c = alt.Chart(daily).mark_bar(color='#c9a227').encode(
+                x='dt:T',
+                y='Actions:Q'
+            ).properties(height=300)
+            st.altair_chart(c, use_container_width=True)
+        
+        # タスクタイプ別統計
+        if not df_t.empty:
+            st.markdown("#### 🎯 タスクタイプ別")
+            task_types = df_t['task_name'].value_counts()
+            type_cols = st.columns(2)
+            with type_cols[0]:
+                for task_name, count in task_types.head(5).items():
+                    st.write(f"- {task_name}: {count}回")
+            with type_cols[1]:
+                if len(task_types) > 5:
+                    for task_name, count in task_types.tail(len(task_types)-5).items():
+                        st.write(f"- {task_name}: {count}回")
+        
+        # カスタマイズ要素
+        st.markdown("#### 🎨 カスタマイズ")
+        st.caption("アバターの見た目を変更できます（現在は実装中）")
+        custom_cols = st.columns(3)
+        with custom_cols[0]:
+            st.caption("アバタースタイル")
+            if st.button("変更（準備中）", disabled=True, key="custom_avatar_btn"):
+                pass
+        with custom_cols[1]:
+            st.caption("テーマカラー")
+            if st.button("変更（準備中）", disabled=True, key="custom_theme_btn"):
+                pass
+        with custom_cols[2]:
+            st.caption("称号表示")
+            current_title = get_user_title(user)
+            st.text_input("カスタム称号", value=current_title, key="custom_title", disabled=True, help="準備中")
+
+    with tab6:  # 記録
         if not df_t.empty:
             daily = df_t.groupby(df_t['dt'].dt.date).size().reset_index(name='Actions')
             c = alt.Chart(daily).mark_bar().encode(x='dt:T', y='Actions:Q')
             st.altair_chart(c, use_container_width=True)
 
-    with tab4: # 倉庫
+    with tab7:  # 倉庫
+        st.subheader("🎒 倉庫")
         if not df_i.empty:
-            cnt = df_i[df_i['user_id']=='u001']['item_name'].value_counts()
-            for n, c in cnt.items(): st.write(f"- {n} x{c}")
+            user_items = df_i[df_i['user_id']=='u001']
+            if not user_items.empty:
+                st.markdown("#### 🐾 モンスター")
+                for idx, row in user_items.iterrows():
+                    monster_name = row['item_name']
+                    monster_level = _int(row.get('quantity', 1))
+                    monster_rarity = row.get('rarity', 'N')
+                    if monster_name in MONSTERS:
+                        m_data = MONSTERS[monster_name]
+                        col1, col2, col3 = st.columns([1, 3, 2])
+                        with col1:
+                            emoji, color = get_monster_display(monster_name, monster_rarity)
+                            st.markdown(f'<div style="font-size: 36px; text-align: center; background: {color}20; border-radius: 8px; padding: 4px;">{emoji}</div>', unsafe_allow_html=True)
+                        with col2:
+                            st.write(f"**{monster_name}** (Lv.{monster_level})")
+                            st.caption(f"{m_data.get('skill_desc', m_data.get('skill_name', m_data['skill']))}")
+                        with col3:
+                            if monster_level < 10:
+                                st.caption(f"レベルアップ: 同じモンスターを1体必要")
+                            else:
+                                st.caption("最大レベル到達")
+                st.markdown("#### 📦 アイテム")
+                # アイテム表示（モンスター以外）
+                items_only = user_items[~user_items['item_name'].isin(MONSTERS.keys())]
+                if not items_only.empty:
+                    for idx, row in items_only.iterrows():
+                        st.write(f"- {row['item_name']} x{row.get('quantity', 1)}")
+                else:
+                    st.caption("アイテムなし")
+            else:
+                st.info("倉庫が空です")
+        else:
+            st.info("倉庫が空です")
 
 if __name__ == "__main__":
     main()
