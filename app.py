@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -52,14 +53,16 @@ def get_monster_url(seed, rarity="N", monster_name=""):
     encoded = base64.b64encode(svg_content.encode('utf-8')).decode('utf-8')
     return f"data:image/svg+xml;base64,{encoded}"
 
-# --- マスターデータ ---
+# --- マスターデータ（difficulty: easy=報酬0.8倍・始めやすい, normal=1.0倍, hard=1.3倍）---
 TASKS = {
-    "🏃 偵察任務 (Walk)": {"reward": 30, "type": "physical", "desc": "周辺調査"},
-    "🧹 聖域整地 (Clean)": {"reward": 30, "type": "holy", "desc": "拠点浄化"},
-    "💪 肉体強化 (Train)": {"reward": 40, "type": "physical", "desc": "攻撃力UP"},
-    "⚡ 魔導構築 (Code)": {"reward": 50, "type": "magic", "desc": "世界改変"},
-    "📖 古代魔術 (Study)": {"reward": 50, "type": "magic", "desc": "知識探求"},
+    "🏃 偵察任務 (Walk)": {"reward": 30, "type": "physical", "desc": "周辺調査", "difficulty": "easy"},
+    "🧹 聖域整地 (Clean)": {"reward": 30, "type": "holy", "desc": "拠点浄化", "difficulty": "easy"},
+    "💪 肉体強化 (Train)": {"reward": 40, "type": "physical", "desc": "攻撃力UP", "difficulty": "normal"},
+    "⚡ 魔導構築 (Code)": {"reward": 50, "type": "magic", "desc": "世界改変", "difficulty": "hard"},
+    "📖 古代魔術 (Study)": {"reward": 50, "type": "magic", "desc": "知識探求", "difficulty": "normal"},
 }
+DIFFICULTY_MULT = {"easy": 0.9, "normal": 1.0, "hard": 1.2}
+DIFFICULTY_LABEL = {"easy": "かんたん", "normal": "ふつう", "hard": "むずかしい"}
 
 JOBS = {
     "Novice": {
@@ -185,6 +188,21 @@ LOGIN_BONUS = {
     14: 1000, 21: 1500, 30: 2000
 }
 
+# 季節限定ミッション（18）：月ごとの条件と報酬
+SEASONAL_MISSIONS = {
+    2: {"name": "冬の偵察", "desc": "今月「偵察任務」を5回", "task_key": "偵察", "target": 5, "reward": 150},
+    3: {"name": "春の学び", "desc": "今月「古代魔術」を5回", "task_key": "古代魔術", "target": 5, "reward": 150},
+    4: {"name": "春の整頓", "desc": "今月「聖域整地」を5回", "task_key": "聖域", "target": 5, "reward": 150},
+    5: {"name": "体を動かす", "desc": "今月「肉体強化」を5回", "task_key": "肉体強化", "target": 5, "reward": 150},
+    6: {"name": "夏の魔導", "desc": "今月「魔導構築」を5回", "task_key": "魔導", "target": 5, "reward": 150},
+}
+# 限定称号（5）：解除条件とボーナス
+EXTRA_TITLES = [
+    {"id": "streak_7", "name": "7日連続", "condition": "streak_7", "bonus": "task_gold_5"},
+    {"id": "streak_30", "name": "30日連続", "condition": "streak_30", "bonus": "task_gold_10"},
+    {"id": "monthly_50", "name": "今月50タスク", "condition": "monthly_50", "bonus": "task_gold_5"},
+]
+
 # --- ミッション（短期目標） ---
 MISSIONS = {
     "daily_1": {"name": "今日1つ", "desc": "今日中にタスク1回", "reward": 30, "type": "daily", "target": 1},
@@ -234,7 +252,7 @@ def calc_task_streak(df_t, user=None):
                 break
     return streak
 
-# --- ペットのセリフ（励まし・昨日比） ---
+# --- ペットのセリフ（励まし・昨日比・ADHD向け責めない言い回し） ---
 PET_MESSAGES = [
     "今日も一緒に頑張ろう！",
     "少しずつで大丈夫だよ。",
@@ -242,17 +260,30 @@ PET_MESSAGES = [
     "休むのも大事だよ。",
     "いい調子だね！",
     "ダンジョン、深く潜ってるね。",
+    "いつでも1つだけ、待ってるよ。",
+    "無理しなくていいんだよ。",
 ]
-def get_pet_message(buddy_name, today_count, yesterday_count):
+PET_MESSAGES_ZERO = [
+    "今日はまだクエストしてないね。1つだけやってみよう！ 小さく始めよう。",
+    "いつでも始めていいよ。今日は1つだけでOK。",
+    "やる気がなくても大丈夫。1つだけ、でいいんだよ。",
+]
+def get_pet_message(buddy_name, today_count, yesterday_count, task_streak=0, rest_today=False):
+    if rest_today:
+        return "今日は休息日だね。ゆっくりして。また明日、待ってるよ。"
+    if today_count >= 3:
+        return "デイリー達成！ すごい！ 今日はもう十分頑張ったね。"
     if today_count > yesterday_count and yesterday_count >= 0:
         return f"昨日は{yesterday_count}回だったけど、今日はもう{today_count}回！ すごい進んでる！"
     if today_count == 2:
         return "あと1つでデイリーだね！ でも2つでも十分頑張ってるよ。"
     if today_count == 1:
-        return "1つできた！ それだけで今日はOKだよ。"
+        return "1つできた！ それだけで今日はOKだよ。もうやらなくていいんだよ。"
     if today_count > 0:
         return random.choice(PET_MESSAGES)
-    return "今日はまだクエストしてないね。1つだけやってみよう！ 小さく始めよう。"
+    if task_streak > 0:
+        return random.choice(["今日1つやれば連続キープだよ。無理しない範囲でね。", "連続記録、続いてるね。今日は1つだけ、どう？"]) + " " + random.choice(PET_MESSAGES_ZERO)
+    return random.choice(PET_MESSAGES_ZERO)
 
 # --- CSS: 確実に適用させるスタイル ---
 st.markdown("""
@@ -548,6 +579,11 @@ def _apply_xp_gain(ws_u, u_idx, new_xp, u_nxt_xp, u_lv):
     else:
         ws_u.update_cell(u_idx, 4, new_xp)
 
+def _invalidate_sheet_cache():
+    """シート更新後に呼ぶ（次回読みで再取得）"""
+    if 'sheet_dirty' in st.session_state:
+        st.session_state.sheet_dirty = True
+
 def _int(val, default=0):
     """スプレッドシートから読み取った値を int に変換（文字列で来ても安全）"""
     if val is None or (isinstance(val, str) and str(val).strip() == ''):
@@ -557,9 +593,25 @@ def _int(val, default=0):
     except (ValueError, TypeError):
         return default
 
+def _save_monthly_sr_claimed(ws_u, u_idx, month_id):
+    """月1回SR確定チケット購入済みを記録（列W(23)）。失敗時はエラー表示。"""
+    try:
+        ws_u.update_cell(u_idx, 23, month_id)
+    except Exception:
+        st.error("SR確定チケットの購入記録に失敗しました。users の列W(23)に「last_monthly_sr_ticket」を追加してください。")
+        st.stop()
+
 def get_weekly_boss():
     week_num = datetime.now().isocalendar()[1]
     return WEEKLY_BOSSES[week_num % len(WEEKLY_BOSSES)]
+
+def get_today_weak():
+    """ボス弱点サイクル：日替わり（月=physical, 火=magic, 水=holy, 木=physical...）"""
+    weak_list = ["physical", "magic", "holy"]
+    return weak_list[date.today().weekday() % 3]
+
+def get_today_weak_label():
+    return {"physical": "物理", "magic": "魔法", "holy": "浄化"}.get(get_today_weak(), "?")
 
 def get_biome_html(floor):
     # 100階層: 10階層ごとに背景が変わる
@@ -581,6 +633,29 @@ def get_biome_html(floor):
     
     biome_data = biomes.get(biome_num, biomes[10])
     return biome_data[0], biome_data[1], biome_data[2], biome_data[3]
+
+# ミニストーリー・フレーバーテキスト（4）
+FLAVOR_BY_FLOOR = {
+    1: "冒険の入口。一歩踏み出した。",
+    10: "洞窟の奥に光が見えた。まだ続く。",
+    25: "迷宮の中心。相棒が背中を押してくれる。",
+    50: "半分を超えた。ここからが本当の試練だ。",
+    75: "深淵が近い。でも、もう戻れない。",
+    100: "最下層。王座の間。君はここまで来た。",
+}
+FLAVOR_BY_REBIRTH = {1: "初めての転生。世界が少し違って見える。", 5: "輪廻を重ねた者だけが知る、静かな力。"}
+
+def get_flavor_text(floor, rebirth_count, total_tasks):
+    """階層・転生・タスク数に応じた短いフレーバー"""
+    f = min(max(1, int(floor)), 100)
+    lines = []
+    if f in FLAVOR_BY_FLOOR:
+        lines.append(FLAVOR_BY_FLOOR[f])
+    if rebirth_count in FLAVOR_BY_REBIRTH:
+        lines.append(FLAVOR_BY_REBIRTH[rebirth_count])
+    if total_tasks >= 100 and not lines:
+        lines.append("百のクエストを超えた。君はもう、立派な冒険者だ。")
+    return " ".join(lines) if lines else None
 
 def check_achievements(user, df_t, df_i, ws_u, u_idx):
     """実績をチェックして未達成のものを返す（既に受取済みのものは除外）"""
@@ -668,8 +743,15 @@ def main():
 
     today = date.today()
     yesterday = today - timedelta(days=1)
-    df_t = pd.DataFrame(ws_t.get_all_records())
-    df_i = pd.DataFrame(ws_i.get_all_records())
+    if not st.session_state.get('sheet_dirty', True) and 'cached_df_t' in st.session_state and 'cached_df_i' in st.session_state:
+        df_t = st.session_state.cached_df_t.copy()
+        df_i = st.session_state.cached_df_i.copy()
+    else:
+        df_t = pd.DataFrame(ws_t.get_all_records())
+        df_i = pd.DataFrame(ws_i.get_all_records())
+        st.session_state.cached_df_t = df_t
+        st.session_state.cached_df_i = df_i
+        st.session_state.sheet_dirty = False
     d_cnt, w_cnt, yesterday_cnt = 0, 0, 0
     if not df_t.empty:
         df_t['dt'] = pd.to_datetime(df_t['created_at'])
@@ -681,6 +763,23 @@ def main():
     wk_id = f"{today.year}-W{today.isocalendar()[1]}"
     w_claim = (str(user.get('weekly_claimed')) == wk_id)
     task_streak = calc_task_streak(df_t, user)
+    month_start = today.replace(day=1)
+    month_tasks_count = len(df_t[(df_t['user_id']=='u001') & (df_t['dt'].dt.date >= month_start)]) if not df_t.empty and 'dt' in df_t.columns else 0
+    unlocked_str = (user.get('unlocked_titles') or '').strip()
+    unlocked_set = set(x.strip() for x in unlocked_str.split(',') if x.strip())
+    if task_streak >= 7 and 'streak_7' not in unlocked_set:
+        unlocked_set.add('streak_7')
+    if task_streak >= 30 and 'streak_30' not in unlocked_set:
+        unlocked_set.add('streak_30')
+    if month_tasks_count >= 50 and 'monthly_50' not in unlocked_set:
+        unlocked_set.add('monthly_50')
+    new_unlocked_str = ','.join(sorted(unlocked_set))
+    if new_unlocked_str != unlocked_str:
+        try:
+            ws_u.update_cell(u_idx, 30, new_unlocked_str)
+            _invalidate_sheet_cache()
+        except Exception:
+            pass
     
     # ログインボーナスチェック
     login_streak = _int(user.get('login_streak'))
@@ -768,8 +867,14 @@ def main():
         st.caption(f"Exp: {cur_xp}/{nxt_xp}")
         st.write(f"💰 {_int(user.get('gold'))} G")
         login_streak = _int(user.get('login_streak'))
-        st.caption(f"🌞 デイリー {d_cnt}/3 ｜ 📅 ウィークリー {w_cnt}/15")
-        st.caption(f"🔥 タスク連続 {task_streak}日 ｜ 📆 ログイン {login_streak}日")
+        # ADHD向け：今日の数字に集中
+        st.markdown(f"""
+        <div style="background: rgba(201, 162, 39, 0.25); border: 2px solid #c9a227; border-radius: 8px; padding: 8px; margin: 4px 0;">
+            <p style="margin: 0; color: #ffecd2; font-size: 1rem; font-weight: bold;">📅 今日</p>
+            <p style="margin: 0; color: #ffd700;">デイリー {d_cnt}/3 ｜ ウィークリー {w_cnt}/15</p>
+            <p style="margin: 4px 0 0 0; color: #c9b896; font-size: 0.9em;">🔥 連続 {task_streak}日 ｜ ログイン {login_streak}日</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     with col_h2:
         # バディ & おしゃべりペット
@@ -786,17 +891,54 @@ def main():
             c_b1, c_b2 = st.columns([1, 4])
             emoji, color = get_monster_display(buddy, b_data['rarity'])
             c_b1.markdown(f'<div style="font-size: 64px; text-align: center; background: {color}20; border-radius: 8px; padding: 8px;">{emoji}</div>', unsafe_allow_html=True)
-            pet_says = get_pet_message(buddy, d_cnt, yesterday_cnt)
+            rest_today = (str(user.get('streak_protect_date')) == str(today) and d_cnt == 0)
+            pet_says = get_pet_message(buddy, d_cnt, yesterday_cnt, task_streak, rest_today)
             st.markdown(f"<div class='pet-speech'><strong>{buddy}</strong> (Lv.{buddy_level})「{pet_says}」</div>", unsafe_allow_html=True)
             skill_desc = b_data.get('skill_desc', b_data.get('skill_name', b_data['skill']))
             level_bonus = f" (レベル{buddy_level}で効果+{(buddy_level-1)*5}%)" if buddy_level > 1 else ""
             st.caption(f"効果: {skill_desc}{level_bonus}")
+            # おでかけ・放置報酬（2）
+            outing_start_raw = (user.get('outing_start') or '').strip()
+            try:
+                outing_start_dt = datetime.fromisoformat(outing_start_raw) if outing_start_raw else None
+            except Exception:
+                outing_start_dt = None
+            if outing_start_dt is None:
+                if st.button("🔄 相棒をおでかけに出す", key="outing_start"):
+                    try:
+                        ws_u.update_cell(u_idx, 35, datetime.now().isoformat())
+                        _invalidate_sheet_cache()
+                        st.success("おでかけに出した。しばらくしたら迎えにいこう。"); st.rerun()
+                    except Exception:
+                        st.caption("outing_start列(35)を追加すると使えます")
+            else:
+                elapsed = (datetime.now() - outing_start_dt).total_seconds() / 3600
+                reward = min(60, int(elapsed * 2))
+                if st.button("🏠 迎えに行く", key="outing_end"):
+                    try:
+                        ws_u.update_cell(u_idx, 35, "")
+                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) + reward)
+                        _invalidate_sheet_cache()
+                        st.success(f"おかえり！ {reward}G おみやげ"); time.sleep(1); st.rerun()
+                    except Exception:
+                        st.caption("列35を空にすると戻ります")
+                st.caption(f"おでかけ中（約{int(elapsed*60)}分経過・最大{reward}G）")
         else:
             st.info("Buddy: なし (ショップで召喚しよう。相棒がいると励ましてくれるよ)")
 
+    # ストリーク保護：今月の使用状況（ADHD向け）
+    streak_protect_used_this_month = False
+    if user.get('streak_protect_date'):
+        try:
+            spd = str(user.get('streak_protect_date'))[:7]  # YYYY-MM
+            streak_protect_used_this_month = (spd == f"{today.year}-{today.month:02d}")
+        except Exception:
+            pass
+    st.caption(f"🛡️ ストリーク保護: {'今月使用済み' if streak_protect_used_this_month else '未使用（ショップで購入可）'}")
+
     # ストリーク保護警告（連続タスクが途切れそうな時）
     if task_streak > 0 and d_cnt == 0:
-        st.markdown("""
+        st.markdown(f"""
         <div class="rpg-window" style="border-color: #f59e0b; background: rgba(50,40,20,0.95);">
             <h4 style="color: #ffecd2; margin: 0 0 8px 0;">⚠️ ストリーク保護</h4>
             <p style="margin: 0; color: #c9b896;">現在{task_streak}日連続中！ 今日1つでもタスクを完了すれば継続できます。</p>
@@ -818,7 +960,7 @@ def main():
                 ws_u.update_cell(u_idx, 10, str(today))  # last_loginを先に更新
                 new_gold = _int(user.get('gold')) + login_bonus_gold
                 ws_u.update_cell(u_idx, 6, new_gold)
-                st.success(f"{login_bonus_gold}G 獲得！"); time.sleep(0.2); st.rerun()
+                st.success(f"{login_bonus_gold}G 獲得！"); _invalidate_sheet_cache(); time.sleep(0.2); st.rerun()
             except Exception as e:
                 st.error(f"ログインボーナスの保存に失敗しました。スプレッドシートの列I(9)に「login_streak」、列J(10)に「last_login」列があるか確認してください。エラー: {str(e)}")
                 st.stop()
@@ -847,20 +989,25 @@ def main():
                     # 更新が成功したことを確認
                     new_gold = _int(user.get('gold')) + unclaimed_rewards
                     ws_u.update_cell(u_idx, 6, new_gold)
-                    st.success(f"{unclaimed_rewards}G 獲得！"); time.sleep(0.2); st.rerun()
+                    st.success(f"{unclaimed_rewards}G 獲得！"); _invalidate_sheet_cache(); time.sleep(0.2); st.rerun()
                 except Exception as e:
                     st.error(f"実績報酬の保存に失敗しました。スプレッドシートの列Y(25)に「achievements」列があるか確認してください。エラー: {str(e)}")
                     st.stop()
     
-    # 報酬予告
+    # ADHD向け：報酬予告を常に1行で（あと〇で〇〇）
+    next_reward_lines = []
+    if d_cnt < 3:
+        next_reward_lines.append(f"あと{3-d_cnt}タスクでデイリー200G")
+    if w_cnt < 15:
+        next_reward_lines.append(f"あと{15-w_cnt}でウィークリー500G")
     if reward_hints:
-        st.markdown("""
-        <div class="rpg-window" style="margin-bottom: 12px; border-color: #60a5fa;">
-            <h4 style="margin: 0 0 8px 0; color: #ffecd2;">💡 次に獲得できる報酬</h4>
+        next_reward_lines.extend(reward_hints[:2])
+    if next_reward_lines:
+        st.markdown(f"""
+        <div class="rpg-window" style="margin-bottom: 8px; border-color: #60a5fa; padding: 10px;">
+            <p style="margin: 0; color: #ffecd2; font-weight: bold;">💡 今やるとお得 — {' ｜ '.join(next_reward_lines[:3])}</p>
         </div>
         """, unsafe_allow_html=True)
-        for hint in reward_hints[:3]:  # 最大3つ表示
-            st.caption(f"✨ {hint}")
     
     # 期間限定イベント表示
     if event_active:
@@ -894,37 +1041,52 @@ def main():
     st.markdown("---")
 
     # --- 2. アクション (タスク) ---
-    rec_task = random.choice(list(TASKS.keys())) if TASKS else ""
-    
-    # ADHD向け：タスク開始のハードルを下げるメッセージ
-    motivation_messages = [
-        "💪 1つだけでも大丈夫！ 小さく始めよう",
-        "🌟 完璧を目指さなくてOK。1つできたらそれでOK！",
-        "✨ 5分だけでもいい。始めることが大切",
-        "🎯 今日は1つだけ。それだけで十分だよ",
-        "💫 小さな一歩が大きな変化につながる",
+    # ADHD向け：今やること1つ（ピン留め or おすすめ）
+    if "adhd_pinned_task" not in st.session_state or st.session_state.adhd_pinned_task not in TASKS:
+        st.session_state.adhd_pinned_task = random.choice(list(TASKS.keys())) if TASKS else ""
+    rec_task = st.session_state.adhd_pinned_task
+    task_list = list(TASKS.keys())
+    week_rot = (today.isocalendar()[1]) % 5  # 週替わりローテーション
+    motivation_sets = [
+        ["💪 1つだけでも大丈夫！ 小さく始めよう", "🎯 今日は1つだけ。それだけで十分だよ"],
+        ["🌟 完璧を目指さなくてOK。1つできたらそれでOK！", "✨ 5分だけでもいい。始めることが大切"],
+        ["💫 小さな一歩が大きな変化につながる", "いつでも1つだけ、待ってるよ"],
+        ["今日はこれだけやればOK。決めよう。", "1つやったら、今日は終わりにしてもいいよ"],
+        ["始めることが一番えらい。", "無理しないで。1つでいいんだよ"],
     ]
-    motivation = random.choice(motivation_messages)
+    motivation = motivation_sets[week_rot][today.day % 2] if motivation_sets else "1つだけやってみよう"
+    
+    st.markdown(f"""
+    <div class="rpg-window" style="margin-bottom: 12px; border-color: #2ECC40;">
+        <h3 style="margin: 0 0 8px 0; color: #2ECC40;">🎯 今日のこれだけ（1つやればOK）</h3>
+        <p style="margin: 0; color: #ffecd2; font-size: 1.2rem; font-weight: bold;">{rec_task}</p>
+        <p style="margin: 4px 0 0 0; color: #c9b896; font-size: 0.9em;">{motivation}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("🔄 おすすめを別のタスクに変える", key="change_pinned_task"):
+        st.session_state.adhd_pinned_task = random.choice(list(TASKS.keys())) if TASKS else rec_task
+        st.rerun()
+    
+    # ボディダブリング風：相棒もいま〇〇をやってるよ
+    body_double_task = random.choice(task_list) if task_list else "偵察任務"
+    st.caption(f"👥 相棒もいま「{body_double_task}」に取り組んでるよ。一緒にやっている気分で。")
     
     st.markdown(f"""
     <div class="rpg-window" style="margin-bottom: 12px; border-color: #60a5fa;">
         <h3 style="margin: 0 0 8px 0;">⚔️ クエストボード ― 行動を選べ</h3>
         <p style="margin: 0; color: #c9b896; font-size: 0.9em;">タスクを完了してゴールドと経験値を得よう</p>
-        <div style="background: rgba(96, 165, 250, 0.2); border-left: 4px solid #60a5fa; padding: 12px; margin: 12px 0; border-radius: 4px;">
-            <p style="margin: 0; color: #ffecd2; font-size: 1rem; font-weight: bold;">{motivation}</p>
-            <p style="margin: 4px 0 0 0; color: #c9b896; font-size: 0.9em;">今日のおすすめ: {rec_task}</p>
-        </div>
-        <p style="margin: 8px 0 0 0; color: #8b7355; font-size: 0.85em;">💡 タスクを1つ完了すると、すぐに報酬がもらえるよ！</p>
+        <p style="margin: 8px 0 0 0; color: #8b7355; font-size: 0.85em;">💡 かんたんタスクは始めやすい。むずかしいは報酬多め。</p>
     </div>
     """, unsafe_allow_html=True)
     
     # デイリー進捗の視覚化（ADHD向け）
     if d_cnt < 3:
         remaining = 3 - d_cnt
+        first_bonus_note = "（最初の1つは初動ボーナス1.5倍！）" if d_cnt == 0 else ""
         st.markdown(f"""
         <div style="background: rgba(201, 162, 39, 0.2); border: 2px solid #c9a227; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
             <p style="margin: 0; color: #ffecd2; font-size: 1.1rem; font-weight: bold;">
-                🎯 デイリー達成まで あと{remaining}タスク！
+                🎯 デイリー達成まで あと{remaining}タスク！ {first_bonus_note}
             </p>
             <div class="bar-bg" style="height: 16px; margin-top: 8px;">
                 <div class="bar-fill-xp" style="width: {min(100, d_cnt/3*100)}%; height: 100%; background: linear-gradient(90deg, #c9a227, #fbbf24);"></div>
@@ -932,16 +1094,34 @@ def main():
             <p style="margin: 4px 0 0 0; color: #c9b896; font-size: 0.9em;">進捗: {d_cnt}/3 ({int(d_cnt/3*100)}%)</p>
         </div>
         """, unsafe_allow_html=True)
+    if d_cnt == 0:
+        st.markdown("""
+        <div style="background: rgba(255, 215, 0, 0.2); border: 2px solid #ffd700; border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
+            <p style="margin: 0; color: #ffd700; font-weight: bold;">🌟 初動ボーナス — あと1タスクでゲット！ 最初の1つで報酬1.5倍</p>
+        </div>
+        """, unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     cols = [c1, c2, c3]
     
+    # タスク見た目カスタム（14）：列33 task_custom (JSON)
+    task_custom = {}
+    try:
+        tc_raw = (user.get('task_custom') or '').strip()
+        if tc_raw:
+            task_custom = json.loads(tc_raw) if isinstance(tc_raw, str) else tc_raw
+    except Exception:
+        pass
     for i, (t_name, t_data) in enumerate(TASKS.items()):
-        # 基本報酬を計算（ボーナス前）
-        base_reward = t_data['reward']
-        btn_label = f"{t_name}\n💰 {base_reward}G"
-        if cols[i%3].button(btn_label, use_container_width=True, help=f"{t_data['desc']} - 基本報酬: {base_reward}G"):
-            # 計算ロジック
-            base = t_data['reward']
+        display_name = task_custom.get(t_name, t_name)
+        diff = t_data.get("difficulty", "normal")
+        mult = DIFFICULTY_MULT.get(diff, 1.0)
+        base_reward = int(t_data['reward'] * mult)
+        diff_label = DIFFICULTY_LABEL.get(diff, "")
+        btn_label = f"{display_name}\n💰 {base_reward}G [{diff_label}]"
+        if cols[i%3].button(btn_label, use_container_width=True, key=f"task_btn_{i}", help=f"{t_data['desc']} - {diff_label} 報酬: {base_reward}G"):
+            # 計算ロジック（難易度倍率を先に適用）
+            diff_mult = DIFFICULTY_MULT.get(t_data.get('difficulty', 'normal'), 1.0)
+            base = int(t_data['reward'] * diff_mult)
             bonus = 1.0
             logs = []
             
@@ -978,6 +1158,13 @@ def main():
             if is_first_today:
                 val = max(1, int(val * 1.5))
                 logs.append("🌟初タスク!")
+            # 連続クリアボーナス（同日2つ目+10G、3つ目+20G）
+            if d_cnt == 1:
+                val += 10
+                logs.append("🔥2つ目+10G")
+            elif d_cnt == 2:
+                val += 20
+                logs.append("🔥3つ目+20G")
             
             # 転生ボーナス（永久）
             rebirth_count = int(user.get('rebirth_count') or 0)
@@ -985,15 +1172,44 @@ def main():
                 rebirth_bonus = 1 + 0.1 * rebirth_count
                 val = max(1, int(val * rebirth_bonus))
                 logs.append("✨転生")
+            # 限定称号ボーナス（5）
+            if 'streak_7' in unlocked_set:
+                val = max(1, int(val * 1.05))
+                logs.append("🏅7日連続")
+            if 'streak_30' in unlocked_set:
+                val = max(1, int(val * 1.10))
+                logs.append("🏅30日連続")
+            if 'monthly_50' in unlocked_set:
+                val = max(1, int(val * 1.05))
+                logs.append("🏅今月50")
             
             # 週末イベントボーナス
             if event_active:
                 val = max(1, int(val * 1.2))
                 logs.append("🎉 週末ボーナス!")
             
-            # ボス
+            # 天気・曜日ボーナス（3）
+            weekday_bonus = 1.0
+            if today.weekday() == 0:  # 月曜
+                weekday_bonus = 1.1
+                logs.append("📅 月曜ボーナス!")
+            elif today.weekday() == 4:  # 金曜
+                weekday_bonus = 1.05
+                logs.append("📅 金曜ボーナス!")
+            val = max(1, int(val * weekday_bonus))
+            # 擬似天気（ランダム）：室内=magic/holy 室外=physical
+            weather_today = random.choice(["sunny", "rainy", "cloudy"])
+            if weather_today == "rainy" and t_data['type'] in ("magic", "holy"):
+                val = max(1, int(val * 1.05))
+                logs.append("🌧 雨の日室内ボーナス!")
+            elif weather_today == "sunny" and t_data['type'] == "physical":
+                val = max(1, int(val * 1.05))
+                logs.append("☀ 晴れ外出ボーナス!")
+            
+            # ボス（弱点サイクル：日替わり）（6）
             w_boss = get_weekly_boss()
-            is_weak = (t_data['type'] == w_boss['weak'])
+            today_weak = ["physical", "magic", "holy"][today.weekday() % 3]
+            is_weak = (t_data['type'] == today_weak)
             dmg = val * 2 if is_weak else val
             if is_weak: logs.append("🔥 弱点!")
             
@@ -1040,7 +1256,7 @@ def main():
             ws_u.update_cell(u_idx, 8, new_floor)
             ws_u.update_cell(u_idx, 19, new_boss_dmg)
             ws_t.append_row([str(uuid.uuid4()), 'u001', t_name, t_data['type'], 1, 'Completed', str(datetime.now())])
-            
+            _invalidate_sheet_cache()
             ts = datetime.now().strftime('%H:%M')
             st.session_state.battle_log.insert(0, f"[{ts}] {t_name}: {val}G " + " ".join(logs))
             
@@ -1089,7 +1305,7 @@ def main():
             elif new_d_cnt >= 3:
                 st.success("🎯 **デイリー達成！** すごい！ 報酬を受け取ろう！")
             
-            # ADHD向け：次のタスクへの動機付け
+            # ADHD向け：次のタスクへの動機付け + 「もう1つ」or「今日はここまで」
             if new_d_cnt < 3:
                 st.markdown(f"""
                 <div style="background: rgba(102, 126, 234, 0.2); border: 2px solid #667eea; border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center;">
@@ -1097,8 +1313,102 @@ def main():
                     <p style="color: #c9b896; margin: 8px 0 0 0; font-size: 0.9em;">でも、今やめたって全然OK。無理しないでね。</p>
                 </div>
                 """, unsafe_allow_html=True)
-            
-            time.sleep(2.5); st.rerun()
+            st.markdown("**次はどうする？**")
+            c_again, c_done = st.columns(2)
+            with c_again:
+                if st.button("もう1つやる", key="one_more_task"):
+                    _invalidate_sheet_cache()
+                    st.rerun()
+            with c_done:
+                if st.button("今日はここまでにする", key="done_for_today"):
+                    st.success("よく頑張った！ また明日。無理しないでね。")
+                    time.sleep(1.2)
+                    _invalidate_sheet_cache()
+                    st.rerun()
+            st.stop()
+
+    # ADHD向け：優しいリマインダー（責めない文言）
+    reminder_messages = []
+    if d_cnt < 3:
+        reminder_messages.append(f"デイリーあと{3-d_cnt}つで200Gだよ。")
+    if w_cnt < 15:
+        reminder_messages.append(f"あと{15-w_cnt}でウィークリー500G。")
+    reminder_messages.extend(["ログイン続けてるとボーナスもらえるよ。", "相棒が待ってるよ。1つだけ、どう？"])
+    gentle_msg = random.choice(reminder_messages) if reminder_messages else "また明日、待ってるよ。"
+    st.markdown(f"""
+    <div style="background: rgba(96, 165, 250, 0.15); border-left: 4px solid #60a5fa; padding: 10px; margin: 12px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #c9b896; font-size: 0.9em;">💬 {gentle_msg}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 「今日は休息にする」（週1回・ストリーク保護と同じ効果）
+    last_rest_week = (str(user.get('last_rest_week') or '')).strip()
+    can_rest_today = (last_rest_week != wk_id)
+    if can_rest_today and d_cnt == 0:
+        if st.button("😌 今日は休息にする（週1回・連続記録キープ）", key="rest_day_btn"):
+            try:
+                ws_u.update_cell(u_idx, 29, wk_id)   # last_rest_week
+                ws_u.update_cell(u_idx, 28, str(today))  # streak_protect_date
+                st.success("お疲れさま。今日はゆっくり休んで。また明日、待ってるよ。"); _invalidate_sheet_cache(); time.sleep(1.5); st.rerun()
+            except Exception:
+                st.info("休息日は今週すでに使用済みか、保存できませんでした。列AC(29)に last_rest_week を追加してください。")
+    # ゾーンタイム（10）：集中開始・終了で記録
+    zone_start_raw = (user.get('zone_start') or '').strip()
+    zone_log_raw = (user.get('zone_log') or '').strip()
+    try:
+        zone_start_dt = datetime.fromisoformat(zone_start_raw) if zone_start_raw else None
+    except Exception:
+        zone_start_dt = None
+    zone_col1, zone_col2 = st.columns(2)
+    with zone_col1:
+        if zone_start_dt is None:
+            if st.button("⏱️ 集中開始", key="zone_start_btn"):
+                try:
+                    ws_u.update_cell(u_idx, 31, datetime.now().isoformat())
+                    _invalidate_sheet_cache()
+                    st.rerun()
+                except Exception:
+                    st.caption("zone_start列(31)を追加すると使えます")
+        else:
+            if st.button("⏱️ 集中終了", key="zone_end_btn"):
+                try:
+                    end = datetime.now()
+                    mins = max(0, int((end - zone_start_dt).total_seconds() // 60))
+                    new_log = (zone_log_raw + "," if zone_log_raw else "") + f"{end.date()}:{mins}"
+                    ws_u.update_cell(u_idx, 31, "")  # clear start
+                    ws_u.update_cell(u_idx, 32, new_log[:500])  # cap length
+                    _invalidate_sheet_cache()
+                    st.success(f"今回 {mins} 分集中しました"); time.sleep(1); st.rerun()
+                except Exception:
+                    st.caption("zone_start(31)/zone_log(32)列を追加すると使えます")
+    with zone_col2:
+        if zone_log_raw:
+            parts = [p for p in zone_log_raw.split(",") if ":" in p]
+            today_parts = [p for p in parts if p.startswith(str(today))]
+            today_mins = sum(int(p.split(":")[-1]) for p in today_parts if p.split(":")[-1].isdigit())
+            st.caption(f"今日の集中: {today_mins} 分")
+        elif zone_start_dt:
+            st.caption("集中中… 終了ボタンで記録")
+
+    # 「今日はやめる」逃げ道
+    if st.button("🏁 今日はここまでにする（また明日）", key="done_today_no_task"):
+        st.balloons()
+        st.success(f"また明日。ストリーク{task_streak}日キープ中。無理しないでね。")
+        _invalidate_sheet_cache()
+        time.sleep(1.5)
+        st.rerun()
+    # 25分チャレンジ（やったら押す→小さな報酬・1日1回）
+    if st.button("⏱️ 25分集中した！ 報酬を受け取る（10G）", key="pomodoro_claim"):
+        try:
+            already = st.session_state.get("pomodoro_date") == str(today)
+            if not already:
+                st.session_state["pomodoro_date"] = str(today)
+                ws_u.update_cell(u_idx, 6, _int(user.get('gold')) + 10)
+                st.success("25分集中お疲れさま！ +10G"); _invalidate_sheet_cache(); time.sleep(0.8); st.rerun()
+            else:
+                st.info("今日はすでに受け取り済みです。また明日！")
+        except Exception:
+            st.info("受け取れませんでした。")
 
     # --- 3. ダンジョン & ボス ---
     floor = min(MAX_FLOOR, max(1, _int(user.get('dungeon_floor'))))
@@ -1212,15 +1522,19 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
+    rebirth_count = int(user.get('rebirth_count') or 0)
+    total_tasks = len(df_t[df_t['user_id']=='u001']) if not df_t.empty else 0
+    flavor_line = get_flavor_text(floor, rebirth_count, total_tasks)
+    flavor_html = f'<p style="margin: 8px 0 0 0; font-size: 0.85em; color: #c9a227; font-style: italic;">📜 {flavor_line}</p>' if flavor_line else ""
     st.markdown(f"""
     <div class="{b_class}">
         <h3>📍 {b_name} (階層 {floor}/{MAX_FLOOR})</h3>
         <p style="margin: 4px 0 0 0; font-size: 0.9em; opacity: 0.9;">{dungeon_flavor}</p>
+        {flavor_html}
     </div>
     """, unsafe_allow_html=True)
     
     # 100階到達: 転生パネル（rebirth_count は G列(7), title は U列(21) に書き込みます）
-    rebirth_count = int(user.get('rebirth_count') or 0)
     if floor >= MAX_FLOOR:
         st.markdown("""
         <div class="rpg-window" style="border-color: #c9a227; background: rgba(40,32,24,0.95);">
@@ -1261,7 +1575,7 @@ def main():
         with c_boss2:
             st.markdown(f"**☠️ WANTED: {w_boss['name']}**")
             st.markdown(f"""<div class="bar-bg"><div class="bar-fill-hp" style="width:{boss_pct}%;"></div></div>""", unsafe_allow_html=True)
-            st.caption(f"HP: {boss_cur}/{boss_max} (弱点: {w_boss['desc']})")
+            st.caption(f"HP: {boss_cur}/{boss_max} ｜ 今日の弱点: **{get_today_weak_label()}**")
             if boss_defeated:
                 st.success("🎉 討伐完了！")
                 st.markdown(f"""
@@ -1282,7 +1596,7 @@ def main():
                             u_lv = _int(user.get('level'), 1)
                             ws_u.update_cell(u_idx, 6, new_gold)
                             _apply_xp_gain(ws_u, u_idx, new_xp, u_nxt_xp, u_lv)
-                            st.success(f"{w_boss.get('reward', 1000)}G + {w_boss.get('reward_xp', 500)}XP 獲得！"); time.sleep(0.2); st.rerun()
+                            st.success(f"{w_boss.get('reward', 1000)}G + {w_boss.get('reward_xp', 500)}XP 獲得！"); _invalidate_sheet_cache(); time.sleep(0.2); st.rerun()
                         except Exception as e:
                             st.error(f"ボス討伐報酬の保存に失敗しました。スプレッドシートの列AA(27)に「boss_claimed」列があるか確認してください。エラー: {str(e)}")
                             st.stop()
@@ -1294,7 +1608,7 @@ def main():
     st.markdown("---")
 
     # --- 4. タブ機能 ---
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📋 ギルド", "💎 ショップ", "🏆 実績", "📚 図鑑", "📊 統計", "📊 記録", "🎒 倉庫"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📋 ギルド", "💎 ショップ", "🏆 実績", "📚 図鑑", "📊 統計", "📊 記録", "🎒 倉庫", "📜 思い出"])
 
     with tab1:
         c_g1, c_g2 = st.columns(2)
@@ -1339,7 +1653,7 @@ def main():
                             ws_u.update_cell(u_idx, 26, new_claimed)  # mission_claimed列を先に更新
                             new_gold = _int(user.get('gold')) + mission_data['reward']
                             ws_u.update_cell(u_idx, 6, new_gold)
-                            st.success(f"{mission_data['reward']}G 獲得！"); time.sleep(0.2); st.rerun()
+                            st.success(f"{mission_data['reward']}G 獲得！"); _invalidate_sheet_cache(); time.sleep(0.2); st.rerun()
                         except Exception as e:
                             st.error(f"ミッション報酬の保存に失敗しました。スプレッドシートの列Z(26)に「mission_claimed」列があるか確認してください。エラー: {str(e)}")
                             st.stop()
@@ -1367,7 +1681,7 @@ def main():
                         ws_u.update_cell(u_idx, 14, str(today))  # daily_claimed列を先に更新
                         new_gold = _int(user.get('gold')) + 200
                         ws_u.update_cell(u_idx, 6, new_gold)
-                        st.success("200G 獲得！"); time.sleep(0.2); st.rerun()
+                        st.success("200G 獲得！"); _invalidate_sheet_cache(); time.sleep(0.2); st.rerun()
                     except Exception as e:
                         st.error(f"デイリー報酬の保存に失敗しました。スプレッドシートの列N(14)に「daily_claimed」列があるか確認してください。エラー: {str(e)}")
                         st.stop()
@@ -1395,12 +1709,35 @@ def main():
                         ws_u.update_cell(u_idx, 15, wk_id)  # weekly_claimed列を先に更新
                         new_gold = _int(user.get('gold')) + 500
                         ws_u.update_cell(u_idx, 6, new_gold)
-                        st.success("500G 獲得！"); time.sleep(0.2); st.rerun()
+                        st.success("500G 獲得！"); _invalidate_sheet_cache(); time.sleep(0.2); st.rerun()
                     except Exception as e:
                         st.error(f"ウィークリー報酬の保存に失敗しました。スプレッドシートの列O(15)に「weekly_claimed」列があるか確認してください。エラー: {str(e)}")
                         st.stop()
             elif w_claim:
                 st.caption("✅ 今週分は受取済み")
+            st.markdown("#### 🌸 季節限定ミッション")
+            month_id = f"{today.year}-{today.month:02d}"
+            seasonal = SEASONAL_MISSIONS.get(today.month)
+            seasonal_claimed = (str(user.get('seasonal_claimed') or '')).strip() == month_id
+            if seasonal:
+                user_tasks_m = df_t[df_t['user_id']=='u001'] if not df_t.empty else pd.DataFrame()
+                if not user_tasks_m.empty and 'created_at' in user_tasks_m.columns:
+                    user_tasks_m = user_tasks_m.copy()
+                    user_tasks_m['dt'] = pd.to_datetime(user_tasks_m['created_at'])
+                month_start = today.replace(day=1)
+                month_tasks = user_tasks_m[(user_tasks_m['dt'].dt.date >= month_start)] if not user_tasks_m.empty and 'dt' in user_tasks_m.columns else pd.DataFrame()
+                count = sum(1 for _, r in month_tasks.iterrows() if seasonal['task_key'] in str(r.get('task_name', ''))) if not month_tasks.empty else 0
+                done = count >= seasonal['target']
+                if not seasonal_claimed and done:
+                    if st.button(f"🎁 季節報酬 {seasonal['reward']}G", key="seasonal_claim"):
+                        try:
+                            ws_u.update_cell(u_idx, 34, month_id)
+                            ws_u.update_cell(u_idx, 6, _int(user.get('gold')) + seasonal['reward'])
+                            _invalidate_sheet_cache()
+                            st.success(f"{seasonal['reward']}G 獲得！"); st.rerun()
+                        except Exception:
+                            st.caption("列AD(34) seasonal_claimed を追加")
+                st.caption(f"{seasonal['name']}: {count}/{seasonal['target']}" + (" 受取済" if seasonal_claimed else ""))
 
         with c_g2:
             st.subheader("⚔️ 職業と転職")
@@ -1435,8 +1772,21 @@ def main():
 
         # 週1回・月1回限定（列V(22), W(23) に last_weekly_ticket, last_monthly_sr_ticket があると保存されます）
         month_id = f"{today.year}-{today.month:02d}"
-        can_weekly_ticket = (str(user.get('last_weekly_ticket') or '') != wk_id)
-        can_monthly_sr = (str(user.get('last_monthly_sr_ticket') or '') != month_id)
+        last_weekly = (str(user.get('last_weekly_ticket') or '')).strip()
+        last_monthly_sr = (str(user.get('last_monthly_sr_ticket') or '')).strip()
+        # 週: "2025-W8" 形式で保存。列に日付(YYYY-MM-DD)が入っていても、その日が今週なら購入済みと判定
+        if last_weekly == wk_id:
+            can_weekly_ticket = False
+        elif len(last_weekly) >= 10 and last_weekly[4] == '-' and last_weekly[7] == '-':
+            try:
+                d = datetime.strptime(last_weekly[:10], "%Y-%m-%d").date()
+                can_weekly_ticket = (d.isocalendar()[0], d.isocalendar()[1]) != (today.isocalendar()[0], today.isocalendar()[1])
+            except Exception:
+                can_weekly_ticket = (last_weekly != wk_id)
+        else:
+            can_weekly_ticket = (last_weekly != wk_id)
+        # 月: "2025-02" 形式で比較（"2025-02-17" など日付が入っていても先頭一致で今月購入済みと判定）
+        can_monthly_sr = not (last_monthly_sr.startswith(month_id) if last_monthly_sr else False)
 
         st.markdown("#### 🏷️ 週・月限定（お得）")
         lim1, lim2 = st.columns(2)
@@ -1480,10 +1830,14 @@ def main():
                             new_monsters.append(m_key)
                             df_i_check = pd.DataFrame(ws_i.get_all_records())
                     
+                    # 先に週次購入済みを記録してから報酬（重複防止）
+                    try:
+                        ws_u.update_cell(u_idx, 22, wk_id)  # last_weekly_ticket
+                    except Exception as e:
+                        st.error(f"週1回チケットの保存に失敗しました。users の列V(22)に「last_weekly_ticket」を追加してください。")
+                        st.stop()
                     new_gold = _int(user.get('gold')) - 800 + total_piece_gold
                     ws_u.update_cell(u_idx, 6, new_gold)
-                    try: ws_u.update_cell(u_idx, 22, wk_id)
-                    except: pass
                     st.session_state.last_gacha_10 = results
                     st.session_state.last_gacha_10_info = {"new": new_monsters, "pieces": total_piece_gold, "rarity_counts": rarity_counts}
                     
@@ -1535,24 +1889,20 @@ def main():
                                 new_level = current_level + 1
                                 monster_idx = monster_row.index[0] + 2
                                 ws_i.update_cell(monster_idx, 4, new_level)
+                                _save_monthly_sr_claimed(ws_u, u_idx, month_id)
                                 ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
-                                try: ws_u.update_cell(u_idx, 23, month_id)
-                                except: pass
                                 st.success(f"重複！{m_key} がレベル{new_level}に上がった！")
                             else:
-                                # 最大レベル時はゴールドに変換
                                 piece_gold = {"N": 10, "R": 30, "SR": 100, "SSR": 300, "UR": 1000}.get(rarity, 100)
                                 new_gold = _int(user.get('gold')) - 600 + piece_gold
+                                _save_monthly_sr_claimed(ws_u, u_idx, month_id)
                                 ws_u.update_cell(u_idx, 6, new_gold)
-                                try: ws_u.update_cell(u_idx, 23, month_id)
-                                except: pass
                                 st.info(f"重複！{m_key}は最大レベルなので {piece_gold}G に変換")
                         time.sleep(1.0); st.rerun()
                     else:
+                        _save_monthly_sr_claimed(ws_u, u_idx, month_id)
                         ws_i.append_row(['u001', m_key, rarity, 1, str(datetime.now())])
                         ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
-                        try: ws_u.update_cell(u_idx, 23, month_id)
-                        except: pass
                         st.session_state.last_gacha_result = (m_key, rarity, False, 0)
                         st.success(f"🎉 {m_key} GET!")
                         time.sleep(1.0); st.rerun()
@@ -2017,6 +2367,41 @@ def main():
                 st.info("倉庫が空です")
         else:
             st.info("倉庫が空です")
+
+    with tab8:  # 思い出アルバム（8）
+        st.subheader("📜 思い出アルバム")
+        user_tasks = df_t[df_t['user_id']=='u001'] if not df_t.empty else pd.DataFrame()
+        if not user_tasks.empty and 'dt' in user_tasks.columns:
+            first_date = user_tasks['dt'].min()
+            if pd.notna(first_date):
+                first_str = first_date.strftime('%Y年%m月%d日') if hasattr(first_date, 'strftime') else str(first_date)[:10]
+                st.markdown(f"**初クエスト** — {first_str}")
+            st.markdown(f"**累計タスク数** — {len(user_tasks)} 回")
+            start_wk = today - timedelta(days=today.weekday())
+            week_tasks = user_tasks[user_tasks['dt'].dt.date >= start_wk] if 'dt' in user_tasks.columns else pd.DataFrame()
+            st.markdown(f"**今週** — {len(week_tasks)} 回")
+            if not week_tasks.empty and 'task_name' in week_tasks.columns:
+                st.caption("今週やったこと:")
+                for _, r in week_tasks.head(10).iterrows():
+                    tn = r.get('task_name', '')
+                    dt_val = r.get('dt', r.get('created_at', ''))
+                    st.caption(f" ・ {tn} ({str(dt_val)[:10]})")
+        else:
+            st.caption("タスクをすると思い出が増えます")
+        st.markdown(f"**現在の階層** — {_int(user.get('dungeon_floor'))} 階")
+        st.markdown(f"**転生回数** — {_int(user.get('rebirth_count'))} 回")
+        st.markdown(f"**タスク連続** — {task_streak} 日")
+
+    # データエクスポート（19）
+    st.markdown("---")
+    st.subheader("📤 データエクスポート")
+    try:
+        user_dict = user.to_dict() if hasattr(user, 'to_dict') else dict(user)
+        export_data = {"user": user_dict, "tasks_count": len(df_t[df_t['user_id']=='u001']) if not df_t.empty else 0, "inventory_count": len(df_i[df_i['user_id']=='u001']) if not df_i.empty else 0, "export_date": str(datetime.now())}
+        json_str = json.dumps(export_data, ensure_ascii=False, indent=2)
+        st.download_button("📥 データをJSONでエクスポート", data=json_str, file_name=f"lifequest_export_{today}.json", mime="application/json", key="export_json_btn")
+    except Exception as e:
+        st.caption(f"エクスポート: {e}")
 
 if __name__ == "__main__":
     main()
