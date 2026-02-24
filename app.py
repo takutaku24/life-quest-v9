@@ -290,13 +290,20 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
 
-/* 全体：ドット絵RPG風ダンジョン（背景は動的に設定される） */
+/* 全体：ドット絵RPG風（メイン画面のデフォルト背景・ダンジョンでは上書き） */
 .stApp {
     color: #e8e0d5 !important;
     font-family: 'DotGothic16', sans-serif;
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
+    /* メイン・ショップ等で常に表示する背景（薄いグリッド＋グラデ） */
+    background: linear-gradient(180deg, #1a1a2e 0%, #2d2d44 50%, #1a1a2e 100%) !important;
+    background-image:
+        repeating-linear-gradient(0deg, transparent 0px, transparent 20px, rgba(139, 115, 85, 0.06) 20px, rgba(139, 115, 85, 0.06) 21px),
+        repeating-linear-gradient(90deg, transparent 0px, transparent 20px, rgba(139, 115, 85, 0.06) 20px, rgba(139, 115, 85, 0.06) 21px),
+        linear-gradient(180deg, #1a1a2e 0%, #2d2d44 50%, #1a1a2e 100%) !important;
+    min-height: 100vh;
 }
 
 /* 本文・キャプションも読みやすく */
@@ -1861,15 +1868,17 @@ def main():
             monthly_sr_claimed = monthly_sr_key in st.session_state
             if st.button("購入（今月分）", key="monthly_sr", disabled=(not can_monthly_sr or monthly_sr_claimed)):
                 if can_monthly_sr and not monthly_sr_claimed and _int(user.get('gold')) >= 600:
-                    # SR確定ガチャ演出
-                    st.markdown("### ✨ SR以上確定召喚中...")
+                    # 重複防止：先にシートに「今月購入済み」と金貨を反映してからガチャ処理
+                    _save_monthly_sr_claimed(ws_u, u_idx, month_id)
+                    ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
                     st.session_state[monthly_sr_key] = True
-                    
+                    _invalidate_sheet_cache()
+
+                    st.markdown("### ✨ SR以上確定召喚中...")
                     m_key = gacha_draw_sr_guaranteed()
                     m_data = MONSTERS[m_key]
                     rarity = m_data['rarity']
-                    
-                    # レアリティに応じた演出
+
                     if rarity == "UR":
                         st.balloons()
                         st.success("🌟✨ **URレア獲得！** ✨🌟")
@@ -1877,11 +1886,10 @@ def main():
                         st.success("💎 **SSRレア獲得！** 💎")
                     else:
                         st.info("⭐ **SRレア獲得！** ⭐")
-                    
+
                     df_i_check = pd.DataFrame(ws_i.get_all_records())
                     already_has = not df_i_check.empty and len(df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]) > 0
                     if already_has:
-                        # 重複時は自動的にレベルアップに使用
                         monster_row = df_i_check[(df_i_check['user_id']=='u001') & (df_i_check['item_name']==m_key)]
                         if not monster_row.empty:
                             current_level = _int(monster_row.iloc[0].get('quantity', 1))
@@ -1889,20 +1897,15 @@ def main():
                                 new_level = current_level + 1
                                 monster_idx = monster_row.index[0] + 2
                                 ws_i.update_cell(monster_idx, 4, new_level)
-                                _save_monthly_sr_claimed(ws_u, u_idx, month_id)
-                                ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
                                 st.success(f"重複！{m_key} がレベル{new_level}に上がった！")
                             else:
                                 piece_gold = {"N": 10, "R": 30, "SR": 100, "SSR": 300, "UR": 1000}.get(rarity, 100)
                                 new_gold = _int(user.get('gold')) - 600 + piece_gold
-                                _save_monthly_sr_claimed(ws_u, u_idx, month_id)
                                 ws_u.update_cell(u_idx, 6, new_gold)
                                 st.info(f"重複！{m_key}は最大レベルなので {piece_gold}G に変換")
                         time.sleep(1.0); st.rerun()
                     else:
-                        _save_monthly_sr_claimed(ws_u, u_idx, month_id)
                         ws_i.append_row(['u001', m_key, rarity, 1, str(datetime.now())])
-                        ws_u.update_cell(u_idx, 6, _int(user.get('gold')) - 600)
                         st.session_state.last_gacha_result = (m_key, rarity, False, 0)
                         st.success(f"🎉 {m_key} GET!")
                         time.sleep(1.0); st.rerun()
